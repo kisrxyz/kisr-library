@@ -281,6 +281,42 @@ describe('ReaderScreen: где остановился', () => {
     expect(saved()?.blockKey).toBe(keyOf(2, 3));
     expect(saved()?.blockIndex).toBe(2);
   });
+
+  it('глава без абзацев с ключами (только карточки): экран уже убран — прокрутка место не пишет', async () => {
+    const { meta, chapters } = buildBook(
+      {
+        title: 'Книга с карточками',
+        category: 'Разное',
+        tags: [],
+        summary: '',
+        source: '',
+        chapters: [
+          { title: 'Текст', md: para(1, 1) },
+          { title: 'Карточки', md: '```cards\nQ: Вопрос один\nA: Ответ один\n\nQ: Вопрос два\nA: Ответ два\n```' },
+        ],
+        warnings: [],
+      },
+      { origin: 'paste', id: 'kniga', now: 1_700_000_000_000 },
+    );
+    await saveBook(meta, chapters);
+    books.value = [meta];
+    await open('#/read/kniga/2');
+    expect(host.querySelectorAll('.prose [data-key]')).toHaveLength(0);
+    await waitFor(() => saved() !== undefined);
+    const before = saved();
+    // Как в браузере: у вынутых из страницы элементов нулевые рамки (и «конец главы» будто в кадре)
+    rectSpy.mockImplementation(function (this: HTMLElement) {
+      return this.isConnected ? fakeRect(this) : ({ top: 0, bottom: 0, height: 0, left: 0, right: 0, width: 0, x: 0, y: 0 } as DOMRect);
+    });
+    host.querySelector('main')!.remove();
+    scrollPage(0);
+    await nextFrame();
+    await nextFrame();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    expect(saved()).toBe(before);
+  });
 });
 
 describe('ReaderScreen: навигация', () => {
@@ -434,25 +470,116 @@ describe('ReaderScreen: сворачивание, время чтения, ух�
   });
 });
 
+describe('ReaderScreen: заглянуть по ссылке (?b=, ?find=) — место не меняется, пока читатель сам не прокрутил', () => {
+  /** Читатель остановился в главе 3, на середине четвёртого абзаца. */
+  const place = { chapter: 3, maxChapter: 3, blockKey: keyOf(3, 4), blockIndex: 3, blockOffset: 0.5, lastReadAt: 5 };
+  const wait = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+
+  it('?b= другой главы (заметка), уход без прокрутки — записанное место прежнее', async () => {
+    await makeBook();
+    setProgress(place);
+    const before = saved();
+    await open(`#/read/kniga/2?b=${keyOf(2, 3)}`);
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 392);
+    await wait(400);
+    expect(saved()).toBe(before);
+    act(() => render(null, host));
+    expect(saved()).toBe(before);
+  });
+
+  it('?find= из поиска, сворачивание и уход без прокрутки — записанное место прежнее', async () => {
+    await makeBook();
+    setProgress(place);
+    const before = saved();
+    await open(`#/read/kniga/2?find=${encodeURIComponent('абзац 4')}`);
+    await wait(400);
+    setVisibility('hidden');
+    window.dispatchEvent(new Event('pagehide'));
+    act(() => render(null, host));
+    expect(saved()).toBe(before);
+  });
+
+  it('«Продолжить» с полки (?b= записанного места) ничего не пишет, пока не прокрутил', async () => {
+    await makeBook();
+    setProgress(place);
+    const before = saved();
+    await open(`#/read/kniga/3?b=${keyOf(3, 4)}`);
+    // то же место, что записано: четвёртый блок и половина его высоты
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 542);
+    await wait(400);
+    act(() => render(null, host));
+    expect(saved()).toBe(before);
+  });
+
+  it('после прокрутки читателя место пишется как обычно', async () => {
+    await makeBook();
+    setProgress(place);
+    await open(`#/read/kniga/2?b=${keyOf(2, 3)}`);
+    scrollPage(500); // линия 508: четвёртый блок главы 2
+    await waitFor(() => saved()?.chapter === 2 && saved()?.blockKey === keyOf(2, 4), 500);
+    expect(saved()?.lastReadAt).not.toBe(5);
+  });
+
+  it('уход «Дальше» без прокрутки: следующая глава открывается с начала и записывается', async () => {
+    await makeBook();
+    setProgress(place);
+    await open(`#/read/kniga/1?b=${keyOf(1, 2)}`);
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label^="Дальше"]')!.click());
+    await waitFor(() => host.querySelector('h1')?.textContent === 'Вторая');
+    await waitFor(() => saved()?.chapter === 2);
+    expect(saved()?.blockKey).toBe(keyOf(2, 1));
+  });
+});
+
 describe('ReaderScreen: переход внутри открытой главы и края', () => {
-  it('?b= в адресе открытой главы — блок под панель, вспышка, место записано, адрес очищен', async () => {
+  it('?b= в адресе открытой главы — блок под панель, вспышка, адрес очищен; место — после прокрутки читателя', async () => {
     await makeBook();
     await open('#/read/kniga/2');
+    await waitFor(() => saved()?.blockKey === keyOf(2, 1));
+    const before = saved();
     act(() => navigate(`#/read/kniga/2?b=${keyOf(2, 4)}`));
     await waitFor(() => location.hash === '#/read/kniga/2');
     // четвёртый блок: 200 + 3·100 − 8
     expect(scrollTo).toHaveBeenLastCalledWith(0, 492);
     expect(host.querySelector(`[data-key="${keyOf(2, 4)}"]`)!.classList.contains('flash-hit')).toBe(true);
-    expect(saved()).toMatchObject({ chapter: 2, blockKey: keyOf(2, 4), blockOffset: 0 });
+    // заглянул — место прежнее
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    expect(saved()).toBe(before);
+    // читает дальше отсюда — место пишется: линия 508, четвёртый блок (500..600), доля 0,08
+    scrollPage(500);
+    await waitFor(() => saved()?.blockKey === keyOf(2, 4), 500);
+    expect(saved()?.chapter).toBe(2);
+    expect(saved()?.blockOffset).toBeCloseTo(0.08, 5);
   });
 
-  it('?find= в адресе открытой главы — <mark> и место записано', async () => {
+  it('?find= в адресе открытой главы — <mark>; место прежнее, пока не прокрутил', async () => {
     await makeBook();
     await open('#/read/kniga/2');
+    await waitFor(() => saved()?.blockKey === keyOf(2, 1));
+    const before = saved();
     act(() => navigate(`#/read/kniga/2?find=${encodeURIComponent('абзац 5')}`));
     await waitFor(() => location.hash === '#/read/kniga/2');
     expect(host.querySelector('.prose mark')?.textContent).toBe('Абзац 5');
-    expect(saved()?.blockKey).toBe(keyOf(2, 5));
+    act(() => render(null, host));
+    expect(saved()).toBe(before);
+  });
+
+  it('прокрутил, потом переход внутри главы: записано место до перехода, не цель перехода', async () => {
+    await makeBook();
+    await open('#/read/kniga/2');
+    scrollPage(400); // линия 408: третий блок — пишется сразу
+    await nextFrame();
+    scrollPage(500); // линия 508: четвёртый блок — запись ждёт конца 300 мс
+    await nextFrame();
+    act(() => navigate(`#/read/kniga/2?b=${keyOf(2, 1)}`));
+    await waitFor(() => location.hash === '#/read/kniga/2');
+    act(() => render(null, host));
+    expect(saved()?.blockKey).toBe(keyOf(2, 4));
   });
 
   it('«‹ Предыдущая глава» открывает предыдущую главу без новой записи истории', async () => {
@@ -486,6 +613,24 @@ describe('ReaderScreen: глава видна, даже если место ве
     expect(host.querySelector('.rbody')?.hasAttribute('hidden')).toBe(false);
     expect(host.querySelector('h1')?.textContent).toBe('Вторая');
     expect(error).toHaveBeenCalledWith('Не удалось вернуть место в главе', expect.any(Error));
+  });
+
+  it('ошибка при восстановлении: прокрутка к началу от приложения не затирает записанное место', async () => {
+    await makeBook();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    setProgress({ chapter: 2, blockKey: keyOf(2, 4), blockIndex: 3, blockOffset: 0.5, lastReadAt: 5 });
+    rectSpy.mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('prose')) throw new Error('раскладка недоступна');
+      return fakeRect(this);
+    });
+    await open('#/read/kniga/2');
+    // Событие прокрутки к началу приходит позже, когда читалка уже слушает прокрутку
+    window.dispatchEvent(new Event('scroll'));
+    await nextFrame();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    expect(saved()).toMatchObject({ chapter: 2, blockKey: keyOf(2, 4), blockOffset: 0.5 });
   });
 
   it('document.fonts.ready отклонён — место всё равно возвращается', async () => {

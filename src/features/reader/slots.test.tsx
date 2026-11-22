@@ -6,7 +6,7 @@ import { buildBook } from '../../core/book';
 import { newProgress } from '../../core/progress';
 import { DEFAULT_SETTINGS, type BookMeta, type Mark } from '../../core/types';
 import { getMarks, putMark } from '../../db/marks';
-import { freshDb } from '../../db/testing';
+import { brokenDb, freshDb } from '../../db/testing';
 import { route } from '../../router';
 import { applySettings, settings } from '../../state/settings';
 import { toasts } from '../../ui/toast-state';
@@ -40,9 +40,26 @@ const BODY = `
   <div class="table-wrap"><p>Таблица</p></div>
   <p>Абзац без ключа.</p>`;
 
+/** Дать эффектам и чтению из базы начаться. Ничего не проверяет: результат ждём через `until`. */
 const flush = () =>
   act(async () => {
     await new Promise((r) => setTimeout(r, 30));
+  });
+
+/** Дождаться условия (запись в базу, тост, перекраска): фиксированная пауза под нагрузкой бывает короче записи. */
+const until = (check: () => void | Promise<void>) =>
+  vi.waitFor(
+    async () => {
+      await act(async () => {});
+      await check();
+    },
+    { timeout: 3000, interval: 10 },
+  );
+
+/** Подождать, чтобы убедиться, что чего-то не случилось (дольше ухода шторки и отложенного тоста). */
+const idle = () =>
+  act(async () => {
+    await new Promise((r) => setTimeout(r, 400));
   });
 
 const tap = (el: Element) => act(() => (el as HTMLElement).click());
@@ -316,16 +333,16 @@ describe('BlockActions: отметка', () => {
     tap(block('pa1'));
     expect(barButton('Отметить').getAttribute('aria-pressed')).toBe('false');
     tap(barButton('Отметить'));
-    await flush();
-    expect(block('pa1').classList.contains('mk')).toBe(true);
-    expect(barButton('Отметить').getAttribute('aria-pressed')).toBe('true');
+    await until(() => {
+      expect(block('pa1').classList.contains('mk')).toBe(true);
+      expect(barButton('Отметить').getAttribute('aria-pressed')).toBe('true');
+    });
     const stored = await getMarks('kniga');
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ blockKey: 'pa1', chapter: 1, highlight: true, text: 'Первый абзац главы.' });
 
     tap(barButton('Отметить'));
-    await flush();
-    expect(block('pa1').classList.contains('mk')).toBe(false);
+    await until(() => expect(block('pa1').classList.contains('mk')).toBe(false));
     expect(await getMarks('kniga')).toEqual([]);
   });
 
@@ -333,9 +350,10 @@ describe('BlockActions: отметка', () => {
     await putMark(savedMark('pa1'));
     await putMark(savedMark('pb2', { highlight: false, note: 'мысль' }));
     mountActions(1);
-    await flush();
-    expect(block('pa1').className).toContain('mk');
-    expect(block('pb2').className).toBe('has-note');
+    await until(() => {
+      expect(block('pa1').className).toContain('mk');
+      expect(block('pb2').className).toBe('has-note');
+    });
     // Новый текст главы (innerHTML заменили) — отметки возвращаются
     prose.innerHTML = BODY;
     mountActions(2);
@@ -350,9 +368,10 @@ describe('BlockActions: отметка', () => {
     tap(barButton('Отметить'));
     tap(barButton('Отметить'));
     tap(barButton('Отметить'));
-    await flush();
-    expect(await getMarks('kniga')).toHaveLength(1);
-    expect(block('pa1').classList.contains('mk')).toBe(true);
+    await until(async () => {
+      expect(await getMarks('kniga')).toHaveLength(1);
+      expect(block('pa1').classList.contains('mk')).toBe(true);
+    });
   });
 });
 
@@ -374,9 +393,8 @@ describe('BlockActions: заметка', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     tap(sheet.querySelector('button[type="submit"]')!);
-    await flush();
 
-    expect(block('pa1').classList.contains('has-note')).toBe(true);
+    await until(() => expect(block('pa1').classList.contains('has-note')).toBe(true));
     expect(block('pa1').classList.contains('mk')).toBe(false);
     expect(block('pa1').classList.contains('sel')).toBe(false);
     expect(bar()).toBeNull();
@@ -386,7 +404,7 @@ describe('BlockActions: заметка', () => {
   it('у блока с заметкой поле заполнено, «Удалить заметку» убирает её и оставляет подсветку', async () => {
     await putMark(savedMark('pa1', { note: 'старая' }));
     mountActions();
-    await flush();
+    await until(() => expect(block('pa1').classList.contains('has-note')).toBe(true));
     tap(block('pa1'));
     expect(barButton('Заметка').hasAttribute('data-on')).toBe(true);
     tap(barButton('Заметка'));
@@ -394,10 +412,100 @@ describe('BlockActions: заметка', () => {
     expect(sheet.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('старая');
     const del = [...sheet.querySelectorAll('button')].find((b) => b.textContent === 'Удалить заметку')!;
     tap(del);
-    await flush();
-    expect(block('pa1').className).toBe('mk');
+    await until(() => expect(block('pa1').className).toBe('mk'));
     expect(await getMarks('kniga')).toMatchObject([{ blockKey: 'pa1', note: '', highlight: true }]);
-    expect(toasts.value.map((t) => t.text)).toContain('Заметка удалена');
+    await until(() => expect(toasts.value.map((t) => t.text)).toContain('Заметка удалена'));
+  });
+
+  it('«Заметка удалена» — только когда запись удалась', async () => {
+    await putMark(savedMark('pa1', { note: 'старая' }));
+    mountActions();
+    await until(() => expect(block('pa1').classList.contains('has-note')).toBe(true));
+    tap(block('pa1'));
+    tap(barButton('Заметка'));
+    const del = [...document.querySelectorAll('dialog.sheet button')].find((b) => b.textContent === 'Удалить заметку')!;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    brokenDb(); // база больше не открывается: удалить не выйдет
+    tap(del);
+    await until(() => expect(toasts.value.map((t) => t.text)).toContain('Не удалось сохранить'));
+    await idle();
+    expect(toasts.value.map((t) => t.text)).not.toContain('Заметка удалена');
+  });
+
+  describe('шторку закрыли мимо «Сохранить» — набранная заметка не теряется', () => {
+    const typeNote = (text: string) => {
+      const input = document.querySelector<HTMLTextAreaElement>('dialog.sheet textarea')!;
+      act(() => {
+        input.value = text;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    };
+    const scrim = () => document.querySelector('dialog.sheet .sheet__scrim')!;
+    const dismissals: [string, () => void][] = [
+      ['нажатие мимо шторки', () => tap(scrim())],
+      [
+        'Esc',
+        () =>
+          act(() => {
+            document.querySelector('dialog.sheet textarea')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          }),
+      ],
+      ['✕', () => tap(document.querySelector('dialog.sheet .sheet__head button[aria-label="Закрыть"]')!)],
+    ];
+    const toastTexts = () => toasts.value.map((t) => t.text);
+
+    for (const [how, dismiss] of dismissals) {
+      it(`${how}: заметка сохраняется, а когда шторка уехала — «Заметка сохранена»`, async () => {
+        mountActions();
+        await flush();
+        tap(block('pa1'));
+        tap(barButton('Заметка'));
+        typeNote('  Не потерять  ');
+        dismiss();
+        await until(async () => expect(await getMarks('kniga')).toMatchObject([{ blockKey: 'pa1', note: 'Не потерять', highlight: false }]));
+        await until(() => expect(toastTexts()).toContain('Заметка сохранена'));
+        expect(block('pa1').classList.contains('has-note')).toBe(true);
+        expect(bar()).toBeNull();
+      });
+    }
+
+    it('пустое поле у абзаца без заметки — закрытие ничего не пишет и молчит', async () => {
+      mountActions();
+      await flush();
+      tap(block('pa1'));
+      tap(barButton('Заметка'));
+      typeNote('   ');
+      tap(scrim());
+      await idle();
+      expect(await getMarks('kniga')).toEqual([]);
+      expect(toastTexts()).toEqual([]);
+    });
+
+    it('заметку стёрли и закрыли мимо «Сохранить» — она остаётся: удаляет только «Удалить заметку»', async () => {
+      await putMark(savedMark('pa1', { highlight: false, note: 'старая' }));
+      mountActions();
+      await until(() => expect(block('pa1').classList.contains('has-note')).toBe(true));
+      tap(block('pa1'));
+      tap(barButton('Заметка'));
+      typeNote('');
+      tap(scrim());
+      await idle();
+      expect(await getMarks('kniga')).toMatchObject([{ blockKey: 'pa1', note: 'старая' }]);
+      expect(toastTexts()).toEqual([]);
+    });
+
+    it('сохранил кнопкой и, пока шторка уезжает, нажал мимо — запись одна, без «Заметка сохранена»', async () => {
+      mountActions();
+      await flush();
+      tap(block('pa1'));
+      tap(barButton('Заметка'));
+      typeNote('Мысль');
+      tap(document.querySelector('dialog.sheet button[type="submit"]')!);
+      tap(scrim());
+      await until(async () => expect(await getMarks('kniga')).toMatchObject([{ note: 'Мысль' }]));
+      await idle();
+      expect(toastTexts()).toEqual([]);
+    });
   });
 
   it('пока шторка заметки открыта, нажатия внутри неё абзац не сбрасывают', async () => {
@@ -418,10 +526,9 @@ describe('BlockActions: копирование', () => {
     await flush();
     tap(block('pb2'));
     tap(barButton('Копировать'));
-    await flush();
     expect(writeText).toHaveBeenCalledWith('Второй абзац, а в нём ссылка.');
     expect(bar()).toBeNull();
-    expect(toasts.value.map((t) => t.text)).toContain('Скопировано');
+    await until(() => expect(toasts.value.map((t) => t.text)).toContain('Скопировано'));
   });
 
   it('буфер недоступен — «Не удалось скопировать»', async () => {
@@ -433,8 +540,17 @@ describe('BlockActions: копирование', () => {
     await flush();
     tap(block('pa1'));
     tap(barButton('Копировать'));
+    await until(() => expect(toasts.value.map((t) => t.text)).toContain('Не удалось скопировать'));
+  });
+
+  it('буфера нет совсем (navigator.clipboard нет) — «Не получилось скопировать», панель закрыта', async () => {
+    expect((navigator as { clipboard?: unknown }).clipboard).toBeUndefined();
+    mountActions();
     await flush();
-    expect(toasts.value.map((t) => t.text)).toContain('Не удалось скопировать');
+    tap(block('pa1'));
+    tap(barButton('Копировать'));
+    await until(() => expect(toasts.value.map((t) => t.text)).toContain('Не получилось скопировать'));
+    expect(bar()).toBeNull();
   });
 });
 
@@ -460,9 +576,10 @@ describe('TocSlot: оглавление', () => {
 
   it('«Отметки»: пусто — подсказка', async () => {
     mountToc();
-    await flush();
     tap(tab('Отметки'));
-    expect(sheet().querySelector('.toc__empty')?.textContent).toBe('Отметок пока нет. Нажми на абзац, чтобы отметить его');
+    await until(() =>
+      expect(sheet().querySelector('.toc__empty')?.textContent).toBe('Отметок пока нет. Нажми на абзац, чтобы отметить его'),
+    );
   });
 
   it('«Отметки»: фрагмент в «ёлочках», заметка, глава; по главам; нажатие ведёт к блоку', async () => {
@@ -470,8 +587,7 @@ describe('TocSlot: оглавление', () => {
     await putMark(savedMark('pa1', { chapter: 1, text: 'Один два', note: 'моя мысль', createdAt: 9 }));
     await putMark({ ...savedMark('zz', { chapter: 1, text: 'Чужая книга' }), id: 'other|zz', bookId: 'other' });
     const onClose = mountToc();
-    await flush();
-    expect(tab('Отметки').textContent).toBe('Отметки2');
+    await until(() => expect(tab('Отметки').textContent).toBe('Отметки2'));
     tap(tab('Отметки'));
     const rows = [...sheet().querySelectorAll<HTMLElement>('.tmarks__row')];
     expect(rows).toHaveLength(2);
@@ -493,7 +609,6 @@ describe('SettingsSlot: «Aa»', () => {
   const sheet = () => document.querySelector('dialog.sheet')!;
   const radio = (label: string) => [...sheet().querySelectorAll<HTMLElement>('[role="radio"]')].find((b) => b.textContent === label)!;
   const labelled = (label: string) => sheet().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
-  const waitSettings = () => flush();
 
   beforeEach(() => applySettings(DEFAULT_SETTINGS));
 
@@ -502,20 +617,23 @@ describe('SettingsSlot: «Aa»', () => {
     expect(sheet().querySelector('.sheet__title')?.textContent).toBe('Оформление');
     expect(sheet().querySelector('output')?.textContent).toBe('18');
     tap(labelled('Увеличить текст'));
-    await waitSettings();
-    expect(settings.value.fontSize).toBe(19);
-    expect(sheet().querySelector('output')?.textContent).toBe('19');
-    expect(document.documentElement.style.getPropertyValue('--read-size')).toBe(`${19 / 16}rem`);
+    await until(() => {
+      expect(settings.value.fontSize).toBe(19);
+      expect(sheet().querySelector('output')?.textContent).toBe('19');
+      expect(document.documentElement.style.getPropertyValue('--read-size')).toBe(`${19 / 16}rem`);
+    });
 
     for (let i = 0; i < 10; i++) tap(labelled('Увеличить текст'));
-    await waitSettings();
-    expect(settings.value.fontSize).toBe(24);
-    expect(labelled('Увеличить текст').disabled).toBe(true);
+    await until(() => {
+      expect(settings.value.fontSize).toBe(24);
+      expect(labelled('Увеличить текст').disabled).toBe(true);
+    });
 
     for (let i = 0; i < 12; i++) tap(labelled('Уменьшить текст'));
-    await waitSettings();
-    expect(settings.value.fontSize).toBe(15);
-    expect(labelled('Уменьшить текст').disabled).toBe(true);
+    await until(() => {
+      expect(settings.value.fontSize).toBe(15);
+      expect(labelled('Уменьшить текст').disabled).toBe(true);
+    });
   });
 
   it('шрифт, интервал и тема применяются сразу', async () => {
@@ -523,15 +641,15 @@ describe('SettingsSlot: «Aa»', () => {
     tap(radio('Без засечек'));
     tap(radio('Свободно'));
     tap(radio('Тёмная'));
-    await waitSettings();
-    expect(settings.value).toMatchObject({ font: 'sans', lineHeight: 'loose', theme: 'dark' });
     const style = document.documentElement.style;
-    expect(style.getPropertyValue('--read-font')).toBe('var(--font-ui)');
-    expect(style.getPropertyValue('--read-line')).toBe('1.75');
-    expect(document.documentElement.dataset.theme).toBe('dark');
+    await until(() => {
+      expect(settings.value).toMatchObject({ font: 'sans', lineHeight: 'loose', theme: 'dark' });
+      expect(style.getPropertyValue('--read-font')).toBe('var(--font-ui)');
+      expect(style.getPropertyValue('--read-line')).toBe('1.75');
+      expect(document.documentElement.dataset.theme).toBe('dark');
+    });
     tap(radio('Авто'));
-    await waitSettings();
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    await until(() => expect(document.documentElement.dataset.theme).toBeUndefined());
     expect(radio('Бумага')).toBeTruthy();
     expect(radio('Светлая')).toBeTruthy();
   });
@@ -541,10 +659,11 @@ describe('SettingsSlot: «Aa»', () => {
     const sw = [...sheet().querySelectorAll<HTMLElement>('[role="switch"]')].find((b) => b.textContent?.startsWith('Переносы'))!;
     expect(sw.getAttribute('aria-checked')).toBe('true');
     tap(sw);
-    await waitSettings();
-    expect(settings.value.hyphens).toBe(false);
-    expect(sw.getAttribute('aria-checked')).toBe('false');
-    expect(document.documentElement.style.getPropertyValue('--read-hyphens')).toBe('manual');
+    await until(() => {
+      expect(settings.value.hyphens).toBe(false);
+      expect(sw.getAttribute('aria-checked')).toBe('false');
+      expect(document.documentElement.style.getPropertyValue('--read-hyphens')).toBe('manual');
+    });
   });
 
   it('«Не гасить экран» скрыт без Wake Lock и работает с ним', async () => {
@@ -560,12 +679,12 @@ describe('SettingsSlot: «Aa»', () => {
     expect(sw.getAttribute('aria-checked')).toBe('false');
     expect(request).not.toHaveBeenCalled();
     tap(sw);
-    await waitSettings();
-    expect(settings.value.keepAwake).toBe(true);
-    expect(request).toHaveBeenCalledWith('screen');
+    await until(() => {
+      expect(settings.value.keepAwake).toBe(true);
+      expect(request).toHaveBeenCalledWith('screen');
+    });
     tap(sw);
-    await waitSettings();
-    expect(sentinel.release).toHaveBeenCalled();
+    await until(() => expect(sentinel.release).toHaveBeenCalled());
   });
 
   it('экран держится и при закрытой шторке, пока читалка открыта', async () => {
@@ -574,10 +693,8 @@ describe('SettingsSlot: «Aa»', () => {
     Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request } });
     settings.value = { ...DEFAULT_SETTINGS, keepAwake: true };
     act(() => render(<SettingsSlot open={false} onClose={() => {}} book={book} chapter={1} />, host));
-    await flush();
-    expect(request).toHaveBeenCalledWith('screen');
+    await until(() => expect(request).toHaveBeenCalledWith('screen'));
     act(() => render(null, host));
-    await flush();
-    expect(sentinel.release).toHaveBeenCalled();
+    await until(() => expect(sentinel.release).toHaveBeenCalled());
   });
 });

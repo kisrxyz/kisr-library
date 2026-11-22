@@ -1,7 +1,8 @@
 /**
  * Читалка (spec §8.1, §8.4, §8.5): одна глава — один экран с прокруткой. Открывается ровно там, где
  * остановился: `?find=` → `?b=` → сохранённое место этой главы → начало. Место пишется при прокрутке
- * и при уходе; конец главы отмечает её дочитанной, конец последней обязательной — всю книгу.
+ * и при уходе (после перехода по `?b=`/`?find=` — только если читатель сам прокрутил); конец главы
+ * отмечает её дочитанной, конец последней обязательной — всю книгу.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { chapterStartWords, lastRequiredChapter, markChapterDone, newProgress, percentOf, remainingWords } from '../../core/progress';
@@ -92,6 +93,8 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
   bookRef.current = book;
   /** Адрес, с которым глава открылась: его `?find=`/`?b=` обработаны при восстановлении. */
   const startRoute = useRef(route);
+  /** Глава открыта переходом по ссылке (заметка, поиск, «Продолжить»): место не пишется, пока не прокрутил. */
+  const peek = !!(startRoute.current.find || startRoute.current.block);
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -123,7 +126,18 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
     setWordsRead(w);
   };
 
-  const tracker = usePositionTracking({ book, chapter, res, ready, saveOnReady, lineY, endReached, onWords });
+  const tracker = usePositionTracking({
+    book,
+    chapter,
+    res,
+    root: () => proseRef.current,
+    ready,
+    saveOnReady,
+    peek,
+    lineY,
+    endReached,
+    onWords,
+  });
 
   // 1. Текст главы: Markdown → безопасный HTML → ключи блоков, чекбоксы, колоды
   useEffect(() => {
@@ -218,14 +232,15 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
         // Событие прокрутки от восстановления приходит кадром позже — слушать начинаем после него
         await nextFrame();
         await nextFrame();
-        saveOnOpen = !saved || target.source !== 'saved';
+        // Сразу пишется только глава, открытая с начала или впервые; переход по ссылке — после прокрутки
+        saveOnOpen = !find && !block && (!saved || target.source !== 'saved');
         restored = true;
       } catch (error) {
         // Место не вернулось — глава всё равно показывается, с начала; сохранённое место не трогаем,
         // пока читатель сам не прокрутит
         console.error('Не удалось вернуть место в главе', error);
         try {
-          window.scrollTo(0, 0);
+          scrollWindowTo(0); // прокрутка от приложения: читателем выбранным местом не считается
         } catch {
           // и прокрутить не вышло — текст всё равно покажем
         }
@@ -260,9 +275,10 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
     });
     let unflash = () => {};
     if (target.source !== 'top') {
+      // Заглянул — место, где читал, остаётся записанным; цель перехода пишется, когда прокрутит сам
+      tracker.jump();
       const lit = place(res.anchors, target, route.find);
       if (lit) unflash = flash(lit);
-      tracker.save();
     }
     cleanAddress(id, chapter);
     return unflash;

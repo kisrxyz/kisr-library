@@ -9,6 +9,7 @@ import type { Mark } from '../../core/types';
 import { getMarks } from '../../db/marks';
 import { ownText } from '../../markdown/enhance';
 import { Icon } from '../../ui/Icon';
+import { EXIT_MS } from '../../ui/Sheet';
 import { toast } from '../../ui/Toast';
 import { paintMarks, saveNote, toggleHighlight } from './marks';
 import { NoteSheet } from './NoteSheet';
@@ -139,12 +140,15 @@ export function BlockActions({ bookId, chapter, root, version }: BlockActionsPro
 
   const markOf = (el: HTMLElement | null) => (el?.dataset.key ? marks.find((m) => m.blockKey === el.dataset.key) : undefined);
 
-  /** Записать и перекрасить. Ошибка базы — тост; вызывать только вне открытой шторки. */
-  const write = (el: HTMLElement, job: () => Promise<Mark | null>) => {
+  /** Записать и перекрасить; `done` — после удачной записи. Ошибка базы — тост; вызывать только вне открытой шторки. */
+  const write = (el: HTMLElement, job: () => Promise<Mark | null>, done?: () => void) => {
     const key = el.dataset.key;
     queue.current = queue.current
       .then(job)
-      .then((m) => setMarks((prev) => [...prev.filter((x) => x.blockKey !== key), ...(m ? [m] : [])]))
+      .then((m) => {
+        setMarks((prev) => [...prev.filter((x) => x.blockKey !== key), ...(m ? [m] : [])]);
+        done?.();
+      })
       .catch((e) => {
         console.error('Не удалось сохранить отметку', e);
         toast('Не удалось сохранить');
@@ -159,6 +163,11 @@ export function BlockActions({ bookId, chapter, root, version }: BlockActionsPro
     if (!sel) return;
     const text = ownText(sel);
     setSel(null);
+    // Нет API буфера (старый браузер, страница не по https): не падаем, а говорим
+    if (!navigator.clipboard?.writeText) {
+      toast('Не получилось скопировать');
+      return;
+    }
     // Запрос к буферу — сразу в обработчике нажатия: iOS другой не пускает
     navigator.clipboard.writeText(text).then(
       () => toast('Скопировано'),
@@ -178,16 +187,16 @@ export function BlockActions({ bookId, chapter, root, version }: BlockActionsPro
     setSel(null);
   };
 
-  const submitNote = (note: string) => {
+  /** Закрыть шторку и записать заметку. `told` — тост, когда запись удалась и шторка уже уехала (под ней его не видно). */
+  const submitNote = (note: string, told?: string) => {
     const el = noteEl;
     closeNote();
-    if (el) write(el, () => saveNote(bookId, chapter, el, note, Date.now()));
+    if (!el) return;
+    const sheetGone = new Promise((r) => setTimeout(r, EXIT_MS));
+    write(el, () => saveNote(bookId, chapter, el, note, Date.now()), told ? () => void sheetGone.then(() => toast(told)) : undefined);
   };
 
-  const removeNote = () => {
-    submitNote('');
-    toast('Заметка удалена');
-  };
+  const removeNote = () => submitNote('', 'Заметка удалена');
 
   const mark = markOf(sel);
   const noteMark = markOf(noteEl);
@@ -213,7 +222,14 @@ export function BlockActions({ bookId, chapter, root, version }: BlockActionsPro
           </button>
         </div>
       )}
-      <NoteSheet open={noteOpen} quote={noteEl ? ownText(noteEl) : ''} mark={noteMark} onSave={submitNote} onDelete={removeNote} onClose={closeNote} />
+      <NoteSheet
+        open={noteOpen}
+        quote={noteEl ? ownText(noteEl) : ''}
+        mark={noteMark}
+        onSave={(note, dismissed) => submitNote(note, dismissed ? 'Заметка сохранена' : undefined)}
+        onDelete={removeNote}
+        onClose={closeNote}
+      />
     </>
   );
 }

@@ -2,6 +2,8 @@
  * Место «где остановился» (spec §8.4). Когда место в главе восстановлено, хук следит за блоком у линии
  * чтения и пишет его в прогресс: при прокрутке — не чаще раза в 300 мс (и не позже чем через 300 мс
  * после остановки), при сворачивании (`visibilitychange: hidden`), на `pagehide` и при уходе из главы.
+ * Переход по ссылке (заметка, поиск, «Продолжить», блок внутри главы) место не пишет, пока читатель сам
+ * не прокрутит: заглянуть в заметку — не значит потерять место, где остановился.
  * Копит активное время чтения: пока вкладка видна и прокрутка была в последние 60 с.
  * Если текст перестроился (размер шрифта в «Aa», поворот экрана, догрузка шрифта), тот же блок
  * возвращается на линию чтения — позиция держится за абзац, а не за пиксели.
@@ -27,10 +29,18 @@ export interface PositionTrackingOptions {
   chapter: number;
   /** Блоки главы после `enhanceChapter`; `null`, пока глава не отрисована. */
   res: EnhanceResult | null;
+  /** Корень текста главы (`.prose`): по нему видно, что экран главы уже убран из страницы. */
+  root: () => HTMLElement | null;
   /** Место восстановлено. До этого ничего не пишется, иначе сохранённое место затрётся началом главы. */
   ready: boolean;
-  /** Сразу записать место, как только оно восстановлено: книга открыта впервые, другая глава, переход по ссылке. */
+  /** Сразу записать место, как только оно восстановлено: книга открыта впервые, другая глава с начала. */
   saveOnReady: boolean;
+  /**
+   * Глава открыта переходом по ссылке (`?b=` — заметка, «Продолжить»; `?find=` — поиск): читатель только
+   * заглянул. Пока он сам не прокрутил, ничего не пишется — ни место, ни время, — и записанное место
+   * («Продолжить») остаётся прежним.
+   */
+  peek: boolean;
   /** Линия чтения в координатах окна: низ панели плюс зазор. */
   lineY: () => number;
   /** Конец главы уже в кадре или выше: глава прочитана целиком. */
@@ -40,8 +50,11 @@ export interface PositionTrackingOptions {
 }
 
 export interface PositionTracker {
-  /** Читатель сам выбрал место (переход к блоку): записать его сейчас. */
-  save(): void;
+  /**
+   * Переход к блоку внутри открытой главы (оглавление, заметка). Вызывать до прокрутки к цели: место,
+   * где читатель был, дописывается сейчас, а цель перехода пишется, только когда он сам прокрутит.
+   */
+  jump(): void;
   /** Записать место и больше не писать: читатель уходит в другую главу. */
   close(): void;
 }
@@ -85,7 +98,7 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
   optsRef.current = opts;
   const api = useRef<PositionTracker | null>(null);
   const tracker = useRef<PositionTracker>({
-    save: () => api.current?.save(),
+    jump: () => api.current?.jump(),
     close: () => api.current?.close(),
   });
 
@@ -97,6 +110,8 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     let closed = false;
     /** Место отличается от записанного: писать и позицию, а не только время. */
     let moved = optsRef.current.saveOnReady;
+    /** Читатель только заглянул по ссылке и сам ещё не прокручивал: не писать ничего (см. `peek`). */
+    let peek = optsRef.current.peek;
     let latest: Anchor = { index: 0, offset: 0 };
     /** Слова главы до `latest` — считаются при замере, запись раскладку не трогает. */
     let latestWords = 0;
@@ -122,7 +137,9 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     // Экран главы уже убран из страницы (идёт переход на другой экран, а очистка этого эффекта ещё не дошла):
     // у блоков нулевые рамки, и измерение приняло бы «все блоки выше линии» за конец главы. Браузер при этом
     // зажимает прокрутку по короткой странице — приходит `scroll` и затирает место, на котором читатель остановился.
-    const detached = () => anchors.length > 0 && !anchors[0].isConnected;
+    // Смотрим на корень текста, а не на первый блок: в главе из одних карточек или таблиц блоков с ключами нет.
+    const root = optsRef.current.root();
+    const detached = () => !!root && !root.isConnected;
 
     const measure = () => {
       if (detached()) return;
@@ -137,7 +154,7 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     const write = () => {
       clearTimeout(timer);
       timer = undefined;
-      if (closed) return;
+      if (closed || (peek && !moved)) return;
       const now = performance.now();
       account(now);
       lastWrite = now;
@@ -252,10 +269,11 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     document.fonts?.addEventListener?.('loadingdone', onFonts);
 
     api.current = {
-      save() {
-        measure();
-        moved = true;
-        write();
+      jump() {
+        // Место до перехода (последний замер) ещё ждёт отложенной записи — дописываем его сейчас
+        if (timer !== undefined) write();
+        moved = false;
+        peek = true;
       },
       close() {
         measure();
