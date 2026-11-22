@@ -265,6 +265,22 @@ describe('ReaderScreen: где остановился', () => {
     act(() => render(null, host));
     expect(saved()?.blockKey).toBe(keyOf(2, 4));
   });
+
+  it('«‹» на странице книги: текст главы уже вынут из страницы, браузер зажал прокрутку — место не затирается', async () => {
+    await makeBook();
+    setProgress({ chapter: 2, blockKey: keyOf(2, 1), blockIndex: 0, blockOffset: 0 });
+    await open('#/read/kniga/2');
+    scrollPage(400); // линия 408: третий блок — пишется сразу
+    await waitFor(() => saved()?.blockKey === keyOf(2, 3), 500);
+    // Экран сменился: главы в документе уже нет, а очистка читалки ещё впереди; страница книги короче — прокрутка зажата
+    host.querySelector('.prose')!.remove();
+    scrollPage(0);
+    await nextFrame();
+    await nextFrame();
+    act(() => render(null, host));
+    expect(saved()?.blockKey).toBe(keyOf(2, 3));
+    expect(saved()?.blockIndex).toBe(2);
+  });
 });
 
 describe('ReaderScreen: навигация', () => {

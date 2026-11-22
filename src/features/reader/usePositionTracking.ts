@@ -119,7 +119,13 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
       lastTick = now;
     };
 
+    // Экран главы уже убран из страницы (идёт переход на другой экран, а очистка этого эффекта ещё не дошла):
+    // у блоков нулевые рамки, и измерение приняло бы «все блоки выше линии» за конец главы. Браузер при этом
+    // зажимает прокрутку по короткой странице — приходит `scroll` и затирает место, на котором читатель остановился.
+    const detached = () => anchors.length > 0 && !anchors[0].isConnected;
+
     const measure = () => {
+      if (detached()) return;
       const o = optsRef.current;
       latest = findAnchor(anchors.map(rectOf), o.lineY());
       // Конец главы в кадре — глава прочитана целиком, даже если линия ещё на последних абзацах
@@ -171,7 +177,7 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
 
     /** Вернуть блок `latest` на линию чтения после перестройки текста. */
     const reanchor = () => {
-      if (closed) return;
+      if (closed || detached()) return;
       const y = anchorTargetY(anchors, latest, optsRef.current.lineY() - LINE_GAP);
       if (Math.abs(y - window.scrollY) >= 1) scrollWindowTo(y);
     };
@@ -183,6 +189,7 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     };
 
     const onScroll = () => {
+      if (detached()) return;
       if (!isProgrammaticScroll()) {
         const now = performance.now();
         account(now);
