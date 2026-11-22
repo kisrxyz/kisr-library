@@ -177,3 +177,12 @@ export function needsBackupReminder(s: Settings, bookCount: number, now: number)
   if (s.lastBackupAt !== null) return now - s.lastBackupAt >= REMINDER_DAYS * 24 * 60 * 60 * 1000;
   return bookCount >= REMINDER_BOOKS_NO_BACKUP;
 }
+
+/**
+ * Время копии из файла — для `lastBackupAt` после восстановления. В чужом или правленом файле его может
+ * не быть, или оно может быть мусором или из будущего: тогда `lastBackupAt` стал бы `NaN`/далёким
+ * будущим, и напоминание о копии замолчало бы. В таких случаях берётся «сейчас».
+ */
+export function backupStamp(exportedAt: unknown, now: number = Date.now()): number {
+  return typeof exportedAt === 'number' && Number.isFinite(exportedAt) && exportedAt <= now ? exportedAt : now;
+}

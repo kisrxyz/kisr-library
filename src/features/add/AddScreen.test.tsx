@@ -414,6 +414,22 @@ describe('«Поделиться» (?shared=1)', () => {
     expect(titles).toContain('вторая книга');
     expect(location.hash).toBe('#/add');
   });
+
+  it('один файл оборван — у него в тосте имя, а остальные файлы того же «Поделиться» читаются', async () => {
+    await putInbox({
+      id: 'a',
+      at: 1,
+      files: [
+        { name: 'копия.json', text: '{"format": "kisr-library-backup", "versi' },
+        { name: 'книга.md', text: book('Тихая работа') },
+      ],
+    });
+    mount(true);
+    await vi.waitFor(() => expect(host.querySelectorAll('.pv')).toHaveLength(1), { timeout: 2000 });
+    expect(host.querySelector<HTMLInputElement>('.pv input[type=text]')?.value).toBe('Тихая работа');
+    expect(toastTexts()).toContain('копия.json: Файл копии повреждён или сделан более новой версией приложения');
+    expect(toastTexts()).not.toContain('Из «Поделиться» ничего не пришло');
+  });
 });
 
 describe('«Попросить Claude»', () => {

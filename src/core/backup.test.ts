@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BACKUP_FORMAT,
   BACKUP_VERSION,
+  backupStamp,
   isBackup,
   needsBackupReminder,
   planMerge,
@@ -323,5 +324,24 @@ describe('needsBackupReminder', () => {
   it('после копии: прошло 14 дней — да, 13 — нет', () => {
     expect(needsBackupReminder({ ...base, lastBackupAt: NOW - 14 * DAY, booksAtLastBackup: 4 }, 4, NOW)).toBe(true);
     expect(needsBackupReminder({ ...base, lastBackupAt: NOW - 13 * DAY, booksAtLastBackup: 4 }, 4, NOW)).toBe(false);
+  });
+});
+
+describe('backupStamp', () => {
+  const now = new Date(2026, 10, 20, 12).getTime();
+
+  it('время копии из файла', () => {
+    const exportedAt = new Date(2026, 10, 17, 12).getTime();
+    expect(backupStamp(exportedAt, now)).toBe(exportedAt);
+  });
+
+  it('нет времени, мусор или не число — берём «сейчас», чтобы напоминание не ломалось', () => {
+    for (const bad of [undefined, null, Number.NaN, Number.POSITIVE_INFINITY, '1700000000000', {}]) {
+      expect(backupStamp(bad, now)).toBe(now);
+    }
+  });
+
+  it('время из будущего не откладывает напоминание: берём «сейчас»', () => {
+    expect(backupStamp(now + 5 * 24 * 3600 * 1000, now)).toBe(now);
   });
 });

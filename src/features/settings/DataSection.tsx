@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { isBackup, type BackupFile } from '../../core/backup';
+import { backupStamp, isBackup, type BackupFile } from '../../core/backup';
 import { formatDate, plural } from '../../core/text';
 import type { BookMeta, Progress, Settings } from '../../core/types';
 import { exportBackup, importBackup } from '../../db/backup';
@@ -10,7 +10,7 @@ import { Icon } from '../../ui/Icon';
 import { EXIT_MS, Sheet } from '../../ui/Sheet';
 import { shareOrDownload } from '../../ui/share';
 import { toast } from '../../ui/Toast';
-import { backupFileName, backupStamp, formatBytes, lastBackupLine } from './format';
+import { backupFileName, formatBytes, lastBackupLine } from './format';
 import { Section } from './Section';
 import { APP_VERSION } from './version';
 

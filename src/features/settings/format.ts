@@ -24,15 +24,6 @@ export function backupFileName(date: Date): string {
   return `kisr-library-backup-${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}.json`;
 }
 
-/**
- * Время копии из файла. В чужом или правленом файле его может не быть, или оно может быть мусором или
- * из будущего: тогда `lastBackupAt` стал бы `NaN`/далёким будущим, и напоминание о копии замолчало бы.
- * В таких случаях берётся «сейчас».
- */
-export function backupStamp(exportedAt: unknown, now: number = Date.now()): number {
-  return typeof exportedAt === 'number' && Number.isFinite(exportedAt) && exportedAt <= now ? exportedAt : now;
-}
-
 /** «Последняя копия: 17 нояб.» или «Копий ещё не было». */
 export function lastBackupLine(lastBackupAt: number | null): string {
   return lastBackupAt === null ? 'Копий ещё не было' : `Последняя копия: ${formatDate(lastBackupAt)}`;

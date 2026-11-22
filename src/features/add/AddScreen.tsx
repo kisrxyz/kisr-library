@@ -95,15 +95,23 @@ export function AddScreen({ route }: { route: RouteOf<'add'> }) {
     takeInbox().then(
       (items) => {
         let found = false;
-        for (const item of items) {
+        let complained = false;
+        const parts = items.reduce((n, item) => n + (item.text?.trim() ? 1 : 0) + (item.files?.length ?? 0), 0);
+        // Каждый текст и файл — отдельно, как при выборе файлов: оборванная копия не мешает прочитать остальное
+        const read = (value: string, fileName?: string) => {
           try {
-            if (item.text?.trim() && take(item.text, 'share')) found = true;
-            for (const f of item.files ?? []) if (take(f.text, 'share', f.name)) found = true;
+            if (take(value, 'share', fileName)) found = true;
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Не удалось прочитать то, чем поделились');
+            const why = e instanceof Error ? e.message : 'Не удалось прочитать то, чем поделились';
+            toast(fileName && parts > 1 ? `${fileName}: ${why}` : why);
+            complained = true;
           }
+        };
+        for (const item of items) {
+          if (item.text?.trim()) read(item.text);
+          for (const f of item.files ?? []) read(f.text, f.name);
         }
-        if (!found) toast('Из «Поделиться» ничего не пришло');
+        if (!found && !complained) toast('Из «Поделиться» ничего не пришло');
       },
       (e) => {
         console.error('Не удалось забрать то, чем поделились', e);

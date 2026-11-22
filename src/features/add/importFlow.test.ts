@@ -126,6 +126,12 @@ describe('readInput: что вставили', () => {
       expect(readInput('  \n', 'file', 'data.json')).toEqual({ kind: 'books', drafts: [] });
     });
 
+    it('имя кончается на «json», но без точки (не .json-файл) — это текст, а не сломанная копия', () => {
+      const list = drafts('{ заметки о книге, а не копия', 'file', 'заметки-json');
+      expect(list).toHaveLength(1);
+      expect(list[0].parsed.chapters[0].md).toContain('заметки о книге');
+    });
+
     it('чужой JSON-подобный текст без имени .json и без слова «kisr-library-backup» — по-прежнему текст', () => {
       const [d] = drafts('{"a": 1,', 'paste');
       expect(d.parsed.chapters[0].title).toBe('Текст');
@@ -519,6 +525,13 @@ describe('restoreBackup', () => {
     await restoreBackup(backupOf(['Первая', 'Вторая', 'Третья', 'Четвёртая'], 1_795_000_000_000));
     expect(settings.value.lastBackupAt).toBe(1_795_000_000_000);
     expect(settings.value.booksAtLastBackup).toBe(4);
+  });
+
+  it('время копии из будущего не глушит напоминание: дата последней копии — «сейчас»', async () => {
+    const before = Date.now();
+    await restoreBackup(backupOf(['Первая'], before + 30 * 24 * 3600 * 1000));
+    expect(settings.value.lastBackupAt).toBeGreaterThanOrEqual(before);
+    expect(settings.value.lastBackupAt).toBeLessThanOrEqual(Date.now());
   });
 
   it('повторное восстановление того же файла: всё пропущено', async () => {

@@ -2,7 +2,7 @@
  * Добавление книг (spec §7.2): что вставили или выбрали → черновики с дублями → запись на полку.
  * Логика без экрана: DOM здесь не нужен, поэтому она проверяется тестами в Node.
  */
-import { BACKUP_FORMAT, isBackup, type BackupFile } from '../../core/backup';
+import { BACKUP_FORMAT, backupStamp, isBackup, type BackupFile } from '../../core/backup';
 import { buildBook, contentHashOf } from '../../core/book';
 import { applyResolution, defaultResolution, findDuplicate, type Duplicate, type Resolution } from '../../core/duplicates';
 import { parseBooks, type ParsedBook } from '../../core/parse';
@@ -75,7 +75,7 @@ export const BROKEN_BACKUP = 'Файл копии повреждён или сд
  */
 function readBackup(raw: string, fileName?: string): BackupFile | null {
   const text = raw.replace(/^﻿/, '').trim();
-  const isJsonFile = !!fileName && /.json$/i.test(fileName);
+  const isJsonFile = !!fileName && /\.json$/i.test(fileName);
   if (!text || !(isJsonFile || text.startsWith('{'))) return null;
   let json: unknown;
   try {
@@ -211,8 +211,8 @@ export function savedMessage(results: { action: CommitAction }[]): string {
 export async function restoreBackup(file: BackupFile): Promise<{ added: number; updated: number; skipped: number }> {
   const report = await importBackup(file);
   try {
-    const exportedAt = Number.isFinite(file.exportedAt) ? file.exportedAt : Date.now();
-    await updateSettings({ lastBackupAt: exportedAt, booksAtLastBackup: (await getAllBooks()).length });
+    // Мусор или время из будущего в файле — «сейчас», иначе напоминание о копии замолчало бы
+    await updateSettings({ lastBackupAt: backupStamp(file.exportedAt), booksAtLastBackup: (await getAllBooks()).length });
   } catch (e) {
     // Книги уже восстановлены; без этой записи напоминание сработает раньше, чем нужно — не страшно.
     console.error('Не удалось запомнить дату копии', e);
