@@ -65,12 +65,15 @@ const typographyOf = (s: Settings) => `${s.fontSize}|${s.lineHeight}|${s.font}|$
 /** Шрифты главы догружены (или ждать дольше `ms` в сумме не стоит: текст пока скрыт). */
 export async function fontsSettled(ms = 2000): Promise<void> {
   const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
-  if (!fonts?.ready) return;
+  if (!fonts) return;
   const deadline = performance.now() + ms;
   for (let i = 0; i < 3; i++) {
     const left = deadline - performance.now();
     if (left <= 0) return;
-    await Promise.race([fonts.ready, new Promise((r) => setTimeout(r, left))]);
+    const ready = fonts.ready as Promise<unknown> | undefined;
+    if (!ready) return;
+    // Шрифт не загрузился — ждать больше нечего: раскладка уже с запасным шрифтом
+    await Promise.race([ready.catch(() => undefined), new Promise((r) => setTimeout(r, left))]);
     // Кадр спустя раскладка могла запросить ещё начертание (курсив, латиницу)
     await new Promise((r) => requestAnimationFrame(r));
     if (fonts.status !== 'loading') return;

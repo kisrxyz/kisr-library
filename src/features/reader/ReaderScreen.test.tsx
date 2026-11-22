@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { buildBook } from '../../core/book';
 import { newProgress } from '../../core/progress';
 import { hash } from '../../core/text';
 import type { BookMeta, Progress } from '../../core/types';
 import { saveBook } from '../../db/books';
 import { freshDb } from '../../db/testing';
-import { navigate, route, type RouteOf } from '../../router';
+import { navDirection, navigate, route, type RouteOf } from '../../router';
 import { __resetLibraryForTests, books, progressMap } from '../../state/library';
 import { runToastAction, toasts } from '../../ui/toast-state';
 import { ReaderScreen } from './ReaderScreen';
@@ -133,6 +133,14 @@ function scrollPage(y: number) {
 
 const saved = () => progressMap.value.get('kniga');
 
+let rectSpy: MockInstance<() => DOMRect>;
+
+/** Свернуть или развернуть приложение (iOS: ушёл на экран «Домой»). */
+function setVisibility(state: 'visible' | 'hidden') {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+
 beforeEach(() => {
   freshDb();
   __resetLibraryForTests();
@@ -141,7 +149,7 @@ beforeEach(() => {
   scrollTo.mockClear();
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY });
   window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+  rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     return fakeRect(this);
   });
   FakeObserver.all = [];
@@ -154,6 +162,8 @@ beforeEach(() => {
 afterEach(() => {
   act(() => render(null, host));
   host.remove();
+  delete (document as { visibilityState?: unknown }).visibilityState;
+  delete (document as { fonts?: unknown }).fonts;
   vi.restoreAllMocks();
   delete (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver;
   __resetLibraryForTests();
@@ -332,5 +342,151 @@ describe('ReaderScreen: дочитал', () => {
     await waitFor(() => saved()?.status === 'finished');
     await waitFor(() => host.textContent!.includes('Вернуть в «Читаю»'));
     expect(host.querySelector('button[aria-label^="Дальше"]')?.getAttribute('aria-label')).toBe('Дальше: Источники · 1 мин');
+  });
+});
+
+describe('ReaderScreen: сворачивание, время чтения, уход', () => {
+  /** Прокрутка с записью сразу, затем вторая — её запись ждёт конца 300 мс. */
+  async function scrollWithPendingWrite() {
+    scrollPage(400); // третий блок — пишется сразу
+    await nextFrame();
+    scrollPage(500); // четвёртый блок — запись отложена
+    await nextFrame();
+    expect(saved()?.blockKey).toBe(keyOf(2, 3));
+  }
+
+  it('сворачивание (visibilitychange: hidden) записывает место сразу, не дожидаясь 300 мс', async () => {
+    await makeBook();
+    setProgress({ chapter: 2, blockKey: keyOf(2, 1), blockIndex: 0, blockOffset: 0 });
+    await open('#/read/kniga/2');
+    await scrollWithPendingWrite();
+    setVisibility('hidden');
+    expect(saved()?.blockKey).toBe(keyOf(2, 4));
+  });
+
+  it('pagehide записывает место сразу', async () => {
+    await makeBook();
+    setProgress({ chapter: 2, blockKey: keyOf(2, 1), blockIndex: 0, blockOffset: 0 });
+    await open('#/read/kniga/2');
+    await scrollWithPendingWrite();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(saved()?.blockKey).toBe(keyOf(2, 4));
+  });
+
+  it('время чтения копится, пока окно видно и прокрутка была не дальше 60 с назад', async () => {
+    let clock = 5_000_000;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    await makeBook();
+    setProgress({ chapter: 2, blockKey: keyOf(2, 1), blockIndex: 0, blockOffset: 0, readingMs: 0 });
+    await open('#/read/kniga/2');
+
+    clock += 30_000; // читал первый экран 30 с, потом прокрутил
+    scrollPage(400);
+    await nextFrame();
+    expect(saved()?.readingMs).toBe(30_000);
+
+    clock += 100_000; // 100 с без прокрутки: засчитываются только 60
+    setVisibility('hidden');
+    expect(saved()?.readingMs).toBe(90_000);
+
+    clock += 50_000; // свёрнуто — не считается
+    setVisibility('visible');
+    clock += 10_000; // вернулся и читает
+    window.dispatchEvent(new Event('pagehide'));
+    expect(saved()?.readingMs).toBe(100_000);
+  });
+
+  it('«‹» из читалки, открытой со страницы книги, — шаг назад к книге', async () => {
+    await makeBook();
+    navigate('#/book/kniga');
+    await open('#/read/kniga/2');
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="К странице книги"]')!.click());
+    await waitFor(() => route.value.name === 'book');
+    expect(navDirection.value).toBe('pop');
+    expect(location.hash).toBe('#/book/kniga');
+  });
+
+  it('«‹» из читалки, открытой из поиска, — книга встаёт на место читалки', async () => {
+    await makeBook();
+    navigate('#/search?q=абзац');
+    await open('#/read/kniga/2?find=абзац');
+    const length = history.length;
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="К странице книги"]')!.click());
+    expect(route.value).toEqual({ name: 'book', id: 'kniga' });
+    expect(navDirection.value).toBe('replace');
+    expect(history.length).toBe(length);
+  });
+});
+
+describe('ReaderScreen: переход внутри открытой главы и края', () => {
+  it('?b= в адресе открытой главы — блок под панель, вспышка, место записано, адрес очищен', async () => {
+    await makeBook();
+    await open('#/read/kniga/2');
+    act(() => navigate(`#/read/kniga/2?b=${keyOf(2, 4)}`));
+    await waitFor(() => location.hash === '#/read/kniga/2');
+    // четвёртый блок: 200 + 3·100 − 8
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 492);
+    expect(host.querySelector(`[data-key="${keyOf(2, 4)}"]`)!.classList.contains('flash-hit')).toBe(true);
+    expect(saved()).toMatchObject({ chapter: 2, blockKey: keyOf(2, 4), blockOffset: 0 });
+  });
+
+  it('?find= в адресе открытой главы — <mark> и место записано', async () => {
+    await makeBook();
+    await open('#/read/kniga/2');
+    act(() => navigate(`#/read/kniga/2?find=${encodeURIComponent('абзац 5')}`));
+    await waitFor(() => location.hash === '#/read/kniga/2');
+    expect(host.querySelector('.prose mark')?.textContent).toBe('Абзац 5');
+    expect(saved()?.blockKey).toBe(keyOf(2, 5));
+  });
+
+  it('«‹ Предыдущая глава» открывает предыдущую главу без новой записи истории', async () => {
+    await makeBook();
+    await open('#/read/kniga/3');
+    const length = history.length;
+    const prev = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Предыдущая глава')!;
+    act(() => prev.click());
+    await waitFor(() => host.querySelector('h1')?.textContent === 'Вторая');
+    expect(location.hash).toBe('#/read/kniga/2');
+    expect(history.length).toBe(length);
+  });
+
+  it('глава 0 — первая глава', async () => {
+    await makeBook();
+    act(() => render(<ReaderScreen route={{ name: 'read', id: 'kniga', chapter: 0 }} />, host));
+    await waitFor(() => host.querySelector('[data-state="ready"]') !== null);
+    expect(host.querySelector('h1')?.textContent).toBe('Первая');
+  });
+});
+
+describe('ReaderScreen: глава видна, даже если место вернуть не вышло', () => {
+  it('ошибка при восстановлении — глава всё равно показывается с начала, ошибка в консоли', async () => {
+    await makeBook();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    rectSpy.mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('prose')) throw new Error('раскладка недоступна');
+      return fakeRect(this);
+    });
+    await open('#/read/kniga/2');
+    expect(host.querySelector('.rbody')?.hasAttribute('hidden')).toBe(false);
+    expect(host.querySelector('h1')?.textContent).toBe('Вторая');
+    expect(error).toHaveBeenCalledWith('Не удалось вернуть место в главе', expect.any(Error));
+  });
+
+  it('document.fonts.ready отклонён — место всё равно возвращается', async () => {
+    await makeBook();
+    setProgress({ chapter: 2, blockKey: keyOf(2, 4), blockIndex: 3, blockOffset: 0.5 });
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: {
+        get ready() {
+          return Promise.reject(new Error('шрифт не загрузился'));
+        },
+        status: 'loaded',
+        addEventListener() {},
+        removeEventListener() {},
+      },
+    });
+    await open('#/read/kniga/2');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 542);
   });
 });

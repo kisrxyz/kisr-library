@@ -11,7 +11,7 @@ import { getChapter } from '../../db/books';
 import { getTasks, setTask } from '../../db/tasks';
 import { enhanceChapter, ownText, type EnhanceResult } from '../../markdown/enhance';
 import { renderMarkdown } from '../../markdown/render';
-import { navigate, route as currentRoute, toHash, type RouteOf } from '../../router';
+import { backTo, navigate, route as currentRoute, toHash, type RouteOf } from '../../router';
 import { books, progressMap, saveProgress, setFinished } from '../../state/library';
 import { settings } from '../../state/settings';
 import { Button } from '../../ui/Button';
@@ -196,32 +196,51 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
     let alive = true;
     let unflash = () => {};
     void (async () => {
-      proseRef.current?.getBoundingClientRect(); // раскладка запрашивает нужные начертания шрифтов
-      await fontsSettled();
-      if (!alive) return;
-      const { find, block } = startRoute.current;
-      // Место из прогресса — только если оно в этой главе (прогресс за концом книги — с начала последней)
-      const p = progressMap.value.get(id);
-      const saved = p?.chapter === chapter ? p : undefined;
-      const target = restoreTarget({
-        keys: res.anchors.map((a) => a.dataset.key ?? ''),
-        texts: find ? res.anchors.map(ownText) : undefined,
-        find,
-        block,
-        saved,
-      });
-      const lit = place(res.anchors, target, find);
-      if (lit) unflash = flash(lit);
-      // Событие прокрутки от восстановления приходит кадром позже — слушать начинаем после него
-      await nextFrame();
-      await nextFrame();
-      if (!alive) return;
-      setSaveOnReady(!saved || target.source !== 'saved');
-      setPhase('ready');
-      cleanAddress(id, chapter);
-      // Пришли кнопкой «Дальше» или стрелкой — фокус не теряется, а встаёт на название главы
-      if (document.activeElement === document.body || document.activeElement === null) {
-        headingRef.current?.focus({ preventScroll: true });
+      let restored = false;
+      let saveOnOpen = false;
+      try {
+        proseRef.current?.getBoundingClientRect(); // раскладка запрашивает нужные начертания шрифтов
+        await fontsSettled();
+        if (!alive) return;
+        const { find, block } = startRoute.current;
+        // Место из прогресса — только если оно в этой главе (прогресс за концом книги — с начала последней)
+        const p = progressMap.value.get(id);
+        const saved = p?.chapter === chapter ? p : undefined;
+        const target = restoreTarget({
+          keys: res.anchors.map((a) => a.dataset.key ?? ''),
+          texts: find ? res.anchors.map(ownText) : undefined,
+          find,
+          block,
+          saved,
+        });
+        const lit = place(res.anchors, target, find);
+        if (lit) unflash = flash(lit);
+        // Событие прокрутки от восстановления приходит кадром позже — слушать начинаем после него
+        await nextFrame();
+        await nextFrame();
+        saveOnOpen = !saved || target.source !== 'saved';
+        restored = true;
+      } catch (error) {
+        // Место не вернулось — глава всё равно показывается, с начала; сохранённое место не трогаем,
+        // пока читатель сам не прокрутит
+        console.error('Не удалось вернуть место в главе', error);
+        try {
+          window.scrollTo(0, 0);
+        } catch {
+          // и прокрутить не вышло — текст всё равно покажем
+        }
+      } finally {
+        if (alive) {
+          setSaveOnReady(saveOnOpen);
+          setPhase('ready');
+          if (restored) {
+            cleanAddress(id, chapter);
+            // Пришли кнопкой «Дальше» или стрелкой — фокус не теряется, а встаёт на название главы
+            if (document.activeElement === document.body || document.activeElement === null) {
+              headingRef.current?.focus({ preventScroll: true });
+            }
+          }
+        }
       }
     })();
     return () => {
@@ -321,7 +340,7 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
         count={count}
         percent={percent}
         hidden={!chromeVisible}
-        onBack={() => navigate({ name: 'book', id })}
+        onBack={() => backTo({ name: 'book', id })}
         onToc={() => setSheet('toc')}
         onSettings={() => setSheet('settings')}
       />

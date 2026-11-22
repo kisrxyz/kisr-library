@@ -105,18 +105,32 @@ export const navDirection: Signal<NavDirection> = signal('initial');
 // Каждая запись истории, открытая внутри приложения, помечается своим номером.
 // Номер > 0 значит, что перед ней есть запись приложения и `history.back()` не уведёт наружу.
 const DEPTH_KEY = 'kisrDepth';
+// И адресом экрана под ней (откуда пришли): по нему `backTo` решает, шагнуть назад или заменить экран.
+// Браузер хранит состояние записи и после перезагрузки.
+const PREV_KEY = 'kisrPrev';
 let depth = 0;
 
+function stateField(state: unknown, key: string): unknown {
+  return state !== null && typeof state === 'object' ? (state as Record<string, unknown>)[key] : undefined;
+}
+
 function depthOf(state: unknown): number | null {
-  if (state === null || typeof state !== 'object') return null;
-  const value = (state as Record<string, unknown>)[DEPTH_KEY];
+  const value = stateField(state, DEPTH_KEY);
   return typeof value === 'number' ? value : null;
 }
 
-function markEntry(d: number, url?: string): void {
+function prevOf(state: unknown): string | null {
+  const value = stateField(state, PREV_KEY);
+  return typeof value === 'string' ? value : null;
+}
+
+/** Пометить текущую запись. Замена (`url`) сохраняет, откуда пришли на эту запись. */
+function markEntry(d: number, url?: string, prev?: string): void {
   const state: unknown = history.state;
   const base = state !== null && typeof state === 'object' ? state : {};
-  history.replaceState({ ...base, [DEPTH_KEY]: d }, '', url);
+  const next: Record<string, unknown> = { ...base, [DEPTH_KEY]: d };
+  if (prev !== undefined) next[PREV_KEY] = prev;
+  history.replaceState(next, '', url);
 }
 
 /** Меняет маршрут вместе со способом перехода (экраны читают их в одном проходе). Тот же адрес — ничего не меняет. */
@@ -134,8 +148,9 @@ function onHistoryChange(): void {
   const known = depthOf(history.state);
   if (known === null) {
     // Запись без номера: её только что создала ссылка или правка адреса — это переход вперёд
+    // с экрана, который ещё в `route`
     depth += 1;
-    markEntry(depth);
+    markEntry(depth, undefined, toHash(route.value));
   } else {
     depth = known;
   }
@@ -159,11 +174,22 @@ export function navigate(to: Route | string, opts: { replace?: boolean } = {}): 
   if (opts.replace) {
     markEntry(depth, hash);
   } else {
-    if (hash === toHash(route.value)) return;
+    const from = toHash(route.value);
+    if (hash === from) return;
     depth += 1;
-    history.pushState({ [DEPTH_KEY]: depth }, '', hash);
+    history.pushState({ [DEPTH_KEY]: depth, [PREV_KEY]: from }, '', hash);
   }
   setRoute(next, opts.replace ? 'replace' : 'push');
+}
+
+/**
+ * «‹» к определённому экрану — например, из читалки к странице её книги. Если пришли оттуда (это запись
+ * под текущей), шаг назад: экран вернётся с прежней прокруткой. Иначе (из поиска, заметок, открыли
+ * снаружи) он встаёт на место текущего без новой записи, и его «Назад» ведёт туда, откуда пришли сюда.
+ */
+export function backTo(target: Route): void {
+  if (depth > 0 && prevOf(history.state) === toHash(target)) history.back();
+  else navigate(target, { replace: true });
 }
 
 /**

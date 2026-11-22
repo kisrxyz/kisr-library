@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { goBack, navDirection, navigate, parseHash, rememberScroll, restoreScroll, route, toHash, type Route } from './router';
+import { backTo, goBack, navDirection, navigate, parseHash, rememberScroll, restoreScroll, route, toHash, type Route } from './router';
 
 const library = (query = ''): Route => ({ name: 'library', params: new URLSearchParams(query) });
 
@@ -197,5 +197,74 @@ describe('прокрутка', () => {
     navigate('#/settings');
     restoreScroll('library');
     expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+  });
+});
+
+// «‹» читалки ведёт к странице книги: шагом назад, если книга — предыдущая запись, иначе заменой
+describe('backTo', () => {
+  const depthNow = () => (history.state as { kisrDepth: number }).kisrDepth;
+  const book: Route = { name: 'book', id: 'bt' };
+
+  it('книга → читалка: «‹» — шаг назад к книге (запись уходит, прокрутка книги вернётся)', async () => {
+    navigate(book);
+    navigate({ name: 'read', id: 'bt', chapter: 2 });
+    const depth = depthNow();
+    const length = history.length;
+    backTo(book);
+    await settle();
+    expect(route.value).toEqual(book);
+    expect(navDirection.value).toBe('pop');
+    expect(depthNow()).toBe(depth - 1);
+    expect(history.length).toBe(length);
+  });
+
+  it('смена главы заменой не теряет, откуда пришли в читалку', async () => {
+    navigate({ name: 'read', id: 'bt', chapter: 2 });
+    navigate({ name: 'read', id: 'bt', chapter: 3 }, { replace: true });
+    navigate({ name: 'read', id: 'bt', chapter: 3, block: 'p1' }, { replace: true });
+    navigate({ name: 'read', id: 'bt', chapter: 3 }, { replace: true });
+    backTo(book);
+    await settle();
+    expect(route.value).toEqual(book);
+    expect(navDirection.value).toBe('pop');
+  });
+
+  it('поиск → читалка: «‹» встаёт на место читалки, а «Назад» книги ведёт в поиск, не в читалку', async () => {
+    navigate({ name: 'search', q: 'сенека' });
+    navigate({ name: 'read', id: 'bt', chapter: 4, find: 'сенека' });
+    const length = history.length;
+    backTo(book);
+    expect(navDirection.value).toBe('replace');
+    expect(route.value).toEqual(book);
+    expect(history.length).toBe(length);
+
+    goBack({ name: 'library', params: new URLSearchParams() });
+    await settle();
+    expect(route.value).toEqual({ name: 'search', q: 'сенека' });
+    expect(navDirection.value).toBe('pop');
+  });
+
+  it('открыли читалку снаружи (холодный старт, нет предыдущей записи): «‹» — замена, «Назад» книги — на полку', async () => {
+    // Как первая загрузка приложения прямо на главе: запись без номера предыдущего экрана
+    history.replaceState({ kisrDepth: 0 }, '', '#/read/cold/1');
+    window.dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
+    await settle();
+    expect(route.value).toMatchObject({ name: 'read', id: 'cold', chapter: 1 });
+
+    const length = history.length;
+    backTo({ name: 'book', id: 'cold' });
+    expect(route.value).toEqual({ name: 'book', id: 'cold' });
+    expect(navDirection.value).toBe('replace');
+    expect(history.length).toBe(length);
+
+    goBack({ name: 'library', params: new URLSearchParams() });
+    expect(route.value).toEqual({ name: 'library', params: new URLSearchParams() });
+    expect(history.length).toBe(length);
+  });
+
+  it('то, откуда пришли, переживает перезагрузку: оно хранится в записи истории', () => {
+    navigate({ name: 'book', id: 'reload' });
+    navigate({ name: 'read', id: 'reload', chapter: 1 });
+    expect(history.state).toMatchObject({ kisrPrev: '#/book/reload' });
   });
 });
