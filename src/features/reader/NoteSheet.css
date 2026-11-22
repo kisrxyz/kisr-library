@@ -1,0 +1,62 @@
+/* Шторка заметки к абзацу */
+
+.nform {
+  display: grid;
+  gap: 14px;
+}
+
+/* Абзац, к которому пишется заметка: латунная черта слева, как у отметки в тексте */
+.nform__quote {
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--brass);
+  color: var(--muted);
+  font-family: var(--font-book);
+  font-size: var(--size-small);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.nform__field {
+  display: grid;
+  gap: 6px;
+}
+
+.nform__label {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-weight: 500;
+}
+
+/* 16px и больше: меньше — iOS приближает страницу при фокусе */
+.nform__input {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-book);
+  font-size: max(16px, 1rem);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.nform__input::placeholder {
+  color: var(--muted);
+}
+
+.nform__input:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 0;
+}
+
+.nform__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.nform .nform__delete {
+  color: var(--danger);
+}

@@ -1,0 +1,163 @@
+/* «Aa»: настройки чтения в шторке */
+
+.rset {
+  display: grid;
+  gap: 16px;
+}
+
+.rset__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rset__field {
+  display: grid;
+  gap: 8px;
+}
+
+.rset__label {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-weight: 500;
+}
+
+.rset__row .rset__label {
+  font-size: var(--size-small);
+  color: var(--ink);
+}
+
+/* ---------- Размер: A− 18 A+ ---------- */
+
+.rset__stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+}
+
+.rset__step {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-book);
+  line-height: 44px;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms;
+}
+
+.rset__a--small {
+  font-size: 0.9375rem;
+}
+
+.rset__a--big {
+  font-size: 1.375rem;
+}
+
+.rset__step:active:not(:disabled) {
+  background: var(--accent-soft);
+  transform: scale(0.96);
+}
+
+.rset__step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.rset__value {
+  min-width: 2.25rem;
+  font-size: var(--size-body);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ---------- Переключатели ---------- */
+
+.rset__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+}
+
+.rset__swtext {
+  display: grid;
+  gap: 2px;
+}
+
+.rset__swlabel {
+  font-size: var(--size-small);
+  font-weight: 500;
+}
+
+.rset__hint {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  line-height: 1.35;
+}
+
+.rset__track {
+  position: relative;
+  flex: none;
+  width: 50px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  transition:
+    background-color 160ms,
+    border-color 160ms;
+}
+
+.rset__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform 180ms var(--ease-out),
+    background-color 160ms;
+}
+
+.rset__switch[aria-checked="true"] .rset__track {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.rset__switch[aria-checked="true"] .rset__thumb {
+  background: var(--accent-ink);
+  transform: translateX(20px);
+}
+
+.rset__switch:active .rset__thumb {
+  transform: scale(0.94);
+}
+
+.rset__switch[aria-checked="true"]:active .rset__thumb {
+  transform: translateX(20px) scale(0.94);
+}

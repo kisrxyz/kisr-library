@@ -1,0 +1,89 @@
+/* Оглавление читалки: вкладки липнут к верху шторки, список прокручивается под ними */
+
+.toc {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.toc__tabs {
+  position: sticky;
+  top: -4px;
+  z-index: 1;
+  margin: -4px 0 0;
+  padding: 4px 0 8px;
+  background: var(--surface);
+}
+
+.toc__empty {
+  padding: 28px 8px 12px;
+  color: var(--muted);
+  font-size: var(--size-small);
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* ---------- Отметки в книге ---------- */
+
+.tmarks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tmarks li + li {
+  border-top: 1px solid var(--line);
+}
+
+.tmarks__row {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 4px 12px 12px;
+  border: 0;
+  border-left: 3px solid var(--brass);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--size-small);
+  line-height: 1.45;
+  text-align: left;
+  transition: background-color 120ms;
+}
+
+.tmarks__text {
+  display: -webkit-box;
+  overflow: hidden;
+  font-family: var(--font-book);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  text-wrap: pretty;
+}
+
+.tmarks__note {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--brass-soft);
+  font-size: var(--size-small);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.tmarks__where {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  line-height: 1.35;
+}
+
+.tmarks__row:active {
+  background: var(--accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tmarks__row:hover {
+    background: var(--accent-soft);
+  }
+}

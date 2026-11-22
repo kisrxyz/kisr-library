@@ -1,8 +1,13 @@
 /**
- * Места для шторок и панели блока читалки. Их наполняет задача 9 (оглавление, «Aa», отметки и заметки);
- * пока это пустые компоненты с готовыми свойствами, и `ReaderScreen` уже рендерит все три.
+ * Места для шторок и панели блока читалки: `ReaderScreen` рендерит все три и о начинке не знает.
+ * Содержимое — в `TocSheet`, `ReaderSettingsSheet` и `BlockActions` (оглавление, «Aa», отметки и заметки).
  */
 import type { BookMeta, Progress } from '../../core/types';
+import { settings } from '../../state/settings';
+import { BlockActions } from './BlockActions';
+import { ReaderSettingsSheet } from './ReaderSettingsSheet';
+import { TocSheet } from './TocSheet';
+import { useWakeLock } from './useWakeLock';
 
 export interface SheetSlotProps {
   open: boolean;
@@ -23,16 +28,20 @@ export interface BlockActionsSlotProps {
 }
 
 /** Оглавление (шторка): главы и отметки книги. */
-export function TocSlot(_props: SheetSlotProps) {
-  return null;
+export function TocSlot(props: SheetSlotProps) {
+  return <TocSheet {...props} />;
 }
 
-/** «Aa» (шторка): размер, шрифт, интервал, тема, переносы, «Не гасить экран». */
-export function SettingsSlot(_props: SheetSlotProps) {
-  return null;
+/**
+ * «Aa» (шторка): размер, шрифт, интервал, тема, переносы, «Не гасить экран».
+ * Слот живёт, пока открыта читалка, — поэтому экран держится и при закрытой шторке.
+ */
+export function SettingsSlot({ open, onClose }: SheetSlotProps) {
+  useWakeLock(settings.value.keepAwake);
+  return <ReaderSettingsSheet open={open} onClose={onClose} />;
 }
 
 /** Нажатие на абзац: «Отметить», «Заметка», «Копировать». */
-export function BlockActionsSlot(_props: BlockActionsSlotProps) {
-  return null;
+export function BlockActionsSlot(props: BlockActionsSlotProps) {
+  return <BlockActions {...props} />;
 }

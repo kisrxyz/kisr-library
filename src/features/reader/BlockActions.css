@@ -1,0 +1,85 @@
+/*
+  Нижняя панель выбранного абзаца (spec §8.8): над плашкой прогресса (.rpill, z 25) и панелью читалки,
+  под шторками (z 70) и тостами (z 90). Снизу — отступ на safe-area. Только токены.
+*/
+
+.bact {
+  position: fixed;
+  right: max(12px, var(--safe-right));
+  bottom: calc(var(--safe-bottom) + 12px);
+  left: max(12px, var(--safe-left));
+  z-index: 40;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  animation: bact-in 180ms var(--ease-out);
+}
+
+@keyframes bact-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.bact__btn,
+.bact__close {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  color: var(--ink);
+  font-size: var(--size-meta);
+  line-height: 1.2;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms;
+}
+
+.bact__btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.bact__close {
+  flex: none;
+  width: 48px;
+  color: var(--muted);
+}
+
+.bact__btn:active,
+.bact__close:active {
+  background: var(--accent-soft);
+  transform: scale(0.97);
+}
+
+/* Включено: блок уже отмечен или у него есть заметка */
+.bact__btn[aria-pressed="true"],
+.bact__btn[data-on] {
+  color: var(--brass);
+  font-weight: 600;
+}
+
+.bact__btn[aria-pressed="true"] .bact__mark {
+  fill: color-mix(in srgb, currentColor 28%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bact__btn:hover,
+  .bact__close:hover {
+    background: var(--accent-soft);
+  }
+}
