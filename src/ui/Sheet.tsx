@@ -30,7 +30,10 @@ function prefersReducedMotion(): boolean {
 
 /** Tab и Shift+Tab ходят по кругу внутри шторки. */
 function trapTab(e: KeyboardEvent, panel: HTMLElement): void {
-  const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+  // tabIndex < 0 — например, невыбранные варианты Segmented: Tab на них не попадает
+  const items = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (el) => el.tabIndex >= 0 && el.getClientRects().length > 0,
+  );
   const active = document.activeElement;
   if (items.length === 0) {
     e.preventDefault();
