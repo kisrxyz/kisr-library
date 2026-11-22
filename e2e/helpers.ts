@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { FixtureBook } from './fixtures/make-book';
 
 /** Вкладка нижней панели: «Полка», «Поиск», «Добавить», «Заметки», «Ещё». */
@@ -85,13 +85,19 @@ export async function scrollChapterTo(page: Page, fraction: number): Promise<voi
 }
 
 /**
- * Кнопка в липкой панели читалки. WebKit под Windows с профилем iPhone считает окно меньше заявленного
- * (innerWidth 340 вместо 390, визуальный вьюпорт сдвигается), и панель оказывается над видимой областью:
- * обычный `click()` сначала прокручивает страницу «к кнопке» и тем самым сдвигает место, которое проверяет
- * тест. На настоящем iPhone такого нет, поэтому нажимаем событием, без прокрутки.
+ * Кнопка в липкой панели читалки. Панель должна быть видна (не спрятана прокруткой): по спрятанной
+ * читатель нажать не может, и тест тоже не должен. В Chromium (проект `android`) — настоящее нажатие.
+ * WebKit под Windows с профилем iPhone считает окно меньше заявленного (innerWidth 340 вместо 390,
+ * визуальный вьюпорт сдвигается), и панель оказывается над видимой областью: обычный `click()` сначала
+ * прокручивает страницу «к кнопке» и тем самым сдвигает место, которое проверяет тест. На настоящем iPhone
+ * такого нет, поэтому только в проекте `iphone` нажимаем событием, без прокрутки.
  */
 export async function pressBarButton(page: Page, name: string): Promise<void> {
-  await page.locator('.rbar').getByRole('button', { name }).dispatchEvent('click');
+  const bar = page.locator('.rbar');
+  await expect(bar, 'панель читалки видна').not.toHaveAttribute('data-hidden');
+  const button = bar.getByRole('button', { name });
+  if (test.info().project.name === 'iphone') await button.dispatchEvent('click');
+  else await button.click();
 }
 
 /** Панель читалки прячется при прокрутке вниз; прокрутка вверх на пару строк возвращает её. */

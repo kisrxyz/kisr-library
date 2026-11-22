@@ -1,6 +1,16 @@
 import { expect, test } from '@playwright/test';
 import { makeBook } from './fixtures/make-book';
-import { addBookFromPaste, expectReaderReady, openBookPage, pressBarButton, scrollChapterTo, tab } from './helpers';
+import {
+  addBookFromPaste,
+  expectReaderReady,
+  openBookPage,
+  pressBarButton,
+  revealBar,
+  savedProgress,
+  scrollChapterTo,
+  tab,
+  topBlock,
+} from './helpers';
 
 test('резервная копия: скачать, восстановить в чистом профиле, восстановить ещё раз', async ({ page, browser }, testInfo) => {
   const book = makeBook();
@@ -17,9 +27,13 @@ test('резервная копия: скачать, восстановить в
   await page.getByRole('link', { name: 'Начать читать' }).click();
   await expectReaderReady(page, book.chapters[0].title, 1, book.chapters.length);
   await scrollChapterTo(page, 0.4);
-  await page.waitForTimeout(500);
+  const here = await topBlock(page);
+  await expect
+    .poll(async () => (await savedProgress(page))?.blockKey, { message: 'место чтения записано', timeout: 3000 })
+    .toBe(here.key);
 
-  // «Ещё» → «Сделать резервную копию»
+  // «Ещё» → «Сделать резервную копию». Панель спряталась при прокрутке вниз: показываем её, как читатель
+  await revealBar(page);
   await pressBarButton(page, 'К странице книги'); // в читалке вкладок нет
   await tab(page, 'Ещё').click();
   await expect(page.getByText('Копий ещё не было')).toBeVisible();

@@ -32,7 +32,7 @@ test('офлайн: после первой загрузки полка и чи�
   await expect(page.locator('.prose p').first()).toBeVisible();
 
   // Вкладки тоже работают без сети: «Ещё» открывается
-  await page.getByRole('button', { name: 'К странице книги' }).dispatchEvent('click');
+  await page.getByRole('button', { name: 'К странице книги' }).click();
   await tab(page, 'Ещё').click();
   await expect(page.getByRole('button', { name: /Сделать резервную копию/ })).toBeVisible();
 });

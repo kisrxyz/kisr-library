@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { makeBook } from './fixtures/make-book';
 import {
   addBookFromPaste,
@@ -13,14 +13,39 @@ import {
   type TopBlock,
 } from './helpers';
 
-/** Сколько ждём после прокрутки: запись места идёт не чаще раза в 300 мс (usePositionTracking). */
+/** Пауза после прокрутки из задания (запись места идёт не чаще раза в 300 мс, usePositionTracking). */
 const SETTLE_MS = 500;
+/** Сколько ждать, пока место запишется или встанет на место после перезагрузки и смены шрифта. */
+const POLL_MS = 3000;
 
-/** Блок у линии чтения после перезагрузки тот же, и стоит он там же (а не просто где-то на экране). */
-function expectSameSpot(after: TopBlock, before: TopBlock, what: string): void {
-  expect(after.key, `${what}: тот же блок (${before.text})`).toBe(before.key);
-  // Место — это блок и доля его высоты, а не пиксели: за доли пикселя от округления отличаться можно
-  expect(Math.abs(after.offset - before.offset), `${what}: доля блока над линией`).toBeLessThan(0.03);
+/**
+ * Блок у линии чтения тот же, и стоит он там же (а не просто где-то на экране). Ждём, а не берём один замер:
+ * после перезагрузки и смены шрифта место встаёт, когда догрузятся шрифты.
+ */
+async function expectSameSpot(page: Page, before: TopBlock, what: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const now = await topBlock(page);
+        // Место — это блок и доля его высоты, а не пиксели: за доли пикселя от округления отличаться можно
+        return { key: now.key, near: Math.abs(now.offset - before.offset) < 0.03 };
+      },
+      { message: `${what}: тот же блок (${before.text}) и та же доля над линией`, timeout: POLL_MS },
+    )
+    .toEqual({ key: before.key, near: true });
+}
+
+/** В базе уже записано это место: тот же блок и та же доля (одного ключа мало — блок мог не смениться). */
+async function expectSaved(page: Page, spot: TopBlock, what: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const saved = await savedProgress(page);
+        return { key: saved?.blockKey, near: !!saved && Math.abs(saved.blockOffset - spot.offset) < 0.03 };
+      },
+      { message: what, timeout: POLL_MS },
+    )
+    .toEqual({ key: spot.key, near: true });
 }
 
 test('место чтения: прокрутка → перезагрузка, «Продолжить», смена размера шрифта', async ({ page }) => {
@@ -40,14 +65,13 @@ test('место чтения: прокрутка → перезагрузка, 
   await scrollChapterTo(page, 0.6);
   await page.waitForTimeout(SETTLE_MS);
   const before = await topBlock(page);
-  const saved = await savedProgress(page);
-  expect(saved?.chapter, 'в базе уже глава 2').toBe(2);
-  expect(saved?.blockKey, 'в базе уже тот же блок, до любого события жизненного цикла').toBe(before.key);
+  await expectSaved(page, before, 'в базе уже тот же блок, до любого события жизненного цикла');
+  expect((await savedProgress(page))?.chapter, 'в базе уже глава 2').toBe(2);
 
   // 2. Перезагрузка прямо в читалке (без перехода по экранам): тот же блок на том же месте
   await page.reload();
   await expectReaderReady(page, chapter.title, 2, count);
-  expectSameSpot(await topBlock(page), before, 'после перезагрузки');
+  await expectSameSpot(page, before, 'после перезагрузки');
 
   // 3. «Продолжить» на полке: тот же блок. В читалке вкладок нет: «‹» к странице книги, оттуда на полку
   await pressBarButton(page, 'К странице книги');
@@ -57,12 +81,13 @@ test('место чтения: прокрутка → перезагрузка, 
   await expect(resume).toBeVisible();
   await resume.click();
   await expectReaderReady(page, chapter.title, 2, count);
-  expectSameSpot(await topBlock(page), before, 'после «Продолжить»');
+  await expectSameSpot(page, before, 'после «Продолжить»');
 
   // 4. Крупный шрифт: «Aa» → размер 22. Тот же абзац остаётся у линии (Review Focus 2) ...
+  // «Продолжить» по ссылке место не пишет, пока читатель не прокрутил: прокрутка вверх (показать панель) — его
   await revealBar(page);
   const beforeFont = await topBlock(page);
-  await page.waitForTimeout(SETTLE_MS);
+  await expectSaved(page, beforeFont, 'место после прокрутки вверх записано');
   await pressBarButton(page, 'Настройки чтения');
   const dialog = page.getByRole('dialog', { name: 'Оформление' });
   await expect(dialog).toBeVisible();
@@ -77,12 +102,12 @@ test('место чтения: прокрутка → перезагрузка, 
   await expect(dialog).toBeHidden();
   const fontAfter = await paragraph.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(fontAfter, 'шрифт действительно стал крупнее').toBeGreaterThan(fontBefore + 3);
-  await page.waitForTimeout(SETTLE_MS);
-  expectSameSpot(await topBlock(page), beforeFont, 'после смены размера');
+  await expectSameSpot(page, beforeFont, 'после смены размера');
+  await expectSaved(page, beforeFont, 'после смены размера в базе то же место');
 
   // ... и после перезагрузки тоже: позиция держится за абзац, а не за пиксели
   await page.reload();
   await expectReaderReady(page, chapter.title, 2, count);
   expect(await paragraph.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)), 'размер 22 запомнился').toBeCloseTo(fontAfter, 0);
-  expectSameSpot(await topBlock(page), beforeFont, 'после смены размера и перезагрузки');
+  await expectSameSpot(page, beforeFont, 'после смены размера и перезагрузки');
 });
