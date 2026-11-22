@@ -16,7 +16,10 @@ export function needsInstallHint(): boolean {
   const standalone =
     (navigator as Navigator & { standalone?: boolean }).standalone === true ||
     (typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches);
-  return !standalone && /iPhone|iPad/.test(navigator.userAgent);
+  const ua = navigator.userAgent;
+  // iPadOS 13+ в Safari называет себя Mac'ом: отличаем по сенсорному экрану
+  const iPadAsMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  return !standalone && (/iPhone|iPad/.test(ua) || iPadAsMac);
 }
 
 /** Что написать в напоминании: копии не было, добавилось много книг или давно не делали. */

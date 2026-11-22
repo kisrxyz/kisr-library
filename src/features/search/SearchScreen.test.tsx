@@ -6,7 +6,7 @@ import { buildBook } from '../../core/book';
 import type { BookMeta } from '../../core/types';
 import { saveBook } from '../../db/books';
 import { freshDb } from '../../db/testing';
-import { navDirection } from '../../router';
+import { navDirection, navigate, route } from '../../router';
 import { __resetLibraryForTests, books } from '../../state/library';
 import { __resetChaptersForTests } from './engine';
 import { SearchScreen } from './SearchScreen';
@@ -172,6 +172,19 @@ describe('SearchScreen: запрос из адреса и ввод', () => {
     expect(heads()).toEqual(['Книги · 1', 'В тексте · 2']);
     expect(location.hash).toBe('#/search?q=%D1%81%D0%B5%D0%BD%D0%B5%D0%BA');
     expect(history.length).toBe(entries);
+  });
+
+  it('ушли с экрана посреди паузы ввода (нажали на результат) — запоздавшая пауза не возвращает в поиск', async () => {
+    await seed(STOIC, OTHER);
+    mount();
+    type('сенек');
+    // Адрес уже читалки, а экран поиска ещё не убран: таймер паузы срабатывает в этот момент
+    act(() => navigate('#/read/stoa/1'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(location.hash).toBe('#/read/stoa/1');
+    expect(route.value.name).toBe('read');
   });
 
   it('быстрый ввод: ищется только последний запрос', async () => {

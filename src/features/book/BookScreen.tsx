@@ -154,7 +154,8 @@ export function BookScreen({ route: current }: { route: RouteOf<'book'> }) {
     goLabel = `Продолжить · гл.\u00A0${currentChapter(book, progress).n}, ${percent}%`;
     goHref = readHref(book, progress);
   } else {
-    // «Читать заново» открывает первую главу; прогресс не сбрасывается, пока читатель не прокрутил
+    // «Читать заново» открывает первую главу с начала. Книга остаётся в «Прочитано» (100 %), а место
+    // «где остановился» сразу переходит на начало главы 1 — как при любом открытии главы с начала
     goLabel = status === 'finished' ? 'Читать заново' : 'Начать читать';
     goHref = toHash({ name: 'read', id, chapter: 1 });
   }

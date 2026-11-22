@@ -1,3 +1,4 @@
+import { isServiceChapter } from '../../core/book';
 import { minutesLabel } from '../../core/time';
 import type { BookMeta, Progress } from '../../core/types';
 import { settings } from '../../state/settings';
@@ -26,6 +27,7 @@ export function ChapterList({ book, progress, onOpen, current }: ChapterListProp
   const wpm = settings.value.wpm;
   const count = book.chapters.length;
   const done = new Set(progress?.chaptersDone);
+  const finished = progress?.status === 'finished';
   // У прочитанной книги «текущей» главы нет: она вся позади
   const here = current ?? (progress?.status === 'reading' ? Math.min(Math.max(1, progress.chapter), count) : undefined);
 
@@ -33,7 +35,9 @@ export function ChapterList({ book, progress, onOpen, current }: ChapterListProp
     <ol class="chapters">
       {book.chapters.map((chapter, i) => {
         const n = i + 1;
-        const state = n === here ? 'current' : done.has(n) ? 'done' : 'todo';
+        // Прочитанная книга (в том числе отмеченная вручную) прочитана вся, кроме справочных глав, которые не открывали
+        const read = done.has(n) || (finished && !isServiceChapter(chapter.title));
+        const state = n === here ? 'current' : read ? 'done' : 'todo';
         return (
           <li key={chapter.id}>
             <button

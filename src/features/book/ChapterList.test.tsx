@@ -87,10 +87,22 @@ describe('ChapterList', () => {
     expect(rows()[2].textContent).toContain('не дочитана');
   });
 
-  it('у прочитанной книги текущей главы нет', () => {
+  it('у прочитанной книги текущей главы нет, все не служебные главы — ✓', () => {
     const progress: Progress = { ...newProgress('kniga', 1), chapter: 3, chaptersDone: [1, 3], status: 'finished' };
     mount({ progress });
-    expect(states()).toEqual(['done', 'todo', 'done', 'todo']);
+    expect(states()).toEqual(['done', 'done', 'done', 'todo']);
+  });
+
+  it('книгу отметили прочитанной вручную (дочитана только последняя глава) — ✓ у всех не служебных', () => {
+    const progress: Progress = { ...newProgress('kniga', 1), chapter: 1, chaptersDone: [3], status: 'finished' };
+    mount({ progress });
+    expect(states()).toEqual(['done', 'done', 'done', 'todo']);
+  });
+
+  it('служебная глава прочитанной книги, если её дочитали, — тоже ✓', () => {
+    const progress: Progress = { ...newProgress('kniga', 1), chapter: 4, chaptersDone: [3, 4], status: 'finished' };
+    mount({ progress });
+    expect(states()).toEqual(['done', 'done', 'done', 'done']);
   });
 
   it('`current` из читалки важнее прогресса', () => {

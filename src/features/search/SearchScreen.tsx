@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { callNumbers } from '../../core/book';
 import { MIN_QUERY, TEXT_LIMIT, searchBooks, type TextHit } from '../../core/search';
 import { normalizeForSearch, plural } from '../../core/text';
-import { navDirection, navigate, rememberScroll, restoreScroll, type RouteOf } from '../../router';
+import { navDirection, navigate, rememberScroll, restoreScroll, route as currentRoute, type RouteOf } from '../../router';
 import { books } from '../../state/library';
 import { settings } from '../../state/settings';
 import { Button } from '../../ui/Button';
@@ -74,6 +74,9 @@ export function SearchScreen({ route: current }: { route: RouteOf<'search'> }) {
   /** Принять запрос: искать и записать в адрес (запись истории заменяется — «назад» не листает буквы). */
   const commit = (value: string) => {
     clearTimeout(timer.current);
+    // Адрес уже не поиска (нажали на результат или вкладку, а экран ещё не убран): пауза ввода
+    // не должна заменить чужой адрес поиском и вернуть читателя назад
+    if (currentRoute.value.name !== 'search') return;
     restore.current = false;
     setQuery(value);
     setAllBooks(false);
