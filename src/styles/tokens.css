@@ -1,0 +1,141 @@
+/*
+  Kisr Library — дизайн-токены (spec §11).
+  «Читальный зал»: бумажный фон, зелёный акцент, латунь для отметок и избранного.
+
+  Темы задаёт атрибут на <html>: data-theme="light" | "dark" | "sepia" («Бумага»).
+  Без атрибута тема следует системе (prefers-color-scheme).
+
+  Контраст: --ink и --muted ≥ 4.5:1 на --paper и --surface во всех темах.
+  Исключение — светлая тема: --brass на --paper 4.4:1. Латунный текст ставь на --surface,
+  на --paper — только значки и крупный текст.
+*/
+
+:root {
+  /* Цвета — светлая тема (по умолчанию и data-theme="light") */
+  --paper: #F2F4F1;          /* фон экрана */
+  --surface: #FFFFFF;        /* карточки, шторки, панели */
+  --ink: #15201B;            /* основной текст */
+  --muted: #58665F;          /* второстепенный текст */
+  --line: #D6DED9;           /* линии и рамки */
+  --accent: #1C694C;         /* действия, ссылки, текущая вкладка */
+  --accent-ink: #FFFFFF;     /* текст на --accent */
+  --accent-soft: #E1EFE8;    /* фон выбранного и нажатого */
+  --brass: #946A15;          /* отметки, избранное */
+  --brass-soft: #F4E9CE;     /* фон отмеченного абзаца */
+  --hero: #1C694C;           /* карточка «Продолжить» */
+  --hero-ink: #FFFFFF;       /* текст на --hero */
+  --danger: #B3261E;         /* удаление, ошибки */
+  --toast-action: #8DDDB9;   /* кнопка в тосте; сам тост — фон --ink, текст --paper */
+  --scrim: rgb(6 12 9 / 0.4);                          /* затемнение под шторкой */
+  --shadow-thumb: 0 1px 2px rgb(0 0 0 / 0.1);           /* выбранный сегмент */
+  --shadow-float: 0 12px 32px -16px rgb(0 0 0 / 0.45); /* шторка, тост */
+  color-scheme: light;
+
+  /* Шрифты по ролям: книга и названия — Literata; интерфейс — Golos Text;
+     знак «Kisr Library» и мелкие надписи — Unbounded */
+  --font-book: "Literata Variable", Georgia, "Times New Roman", serif;
+  --font-ui: "Golos Text Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-brand: "Unbounded Variable", "Golos Text Variable", system-ui, sans-serif;
+
+  /* Размеры текста по ролям */
+  --size-title: 1.75rem;     /* 28 — название книги на её странице */
+  --size-heading: 1.1875rem; /* 19 — название в карточке, заголовок блока */
+  --size-body: 1rem;         /* 16 — интерфейс и поля ввода (меньше 16px — iOS зумит) */
+  --size-small: 0.9375rem;   /* 15 — описания, подсказки, кнопки */
+  --size-meta: 0.8125rem;    /* 13 — мета-строки, счётчики */
+  --size-label: 0.6875rem;   /* 11 — подписи вкладок, надписи */
+
+  /* Читалка: значения по умолчанию; настройки «Aa» переопределяют их на <html> */
+  --read-font: var(--font-book);
+  --read-size: 1.125rem;     /* 18px; диапазон 15–24px */
+  --read-line: 1.6;          /* плотно 1.45 · обычно 1.6 · свободно 1.75 */
+  --read-hyphens: auto;      /* auto | manual */
+
+  /* Форма */
+  --radius-control: 12px;    /* кнопки, поля, сегменты */
+  --radius-card: 14px;       /* карточки книг */
+  --radius-hero: 18px;       /* «Продолжить» */
+  --radius-sheet: 20px;      /* шторки */
+  --radius-pill: 999px;      /* фишки, тосты */
+
+  /* Раскладка */
+  --gutter: 16px;            /* поля экрана */
+  --content-max: 720px;      /* ширина колонки */
+  --bar-h: 56px;             /* верхняя панель */
+  --tabbar-h: 56px;          /* нижние вкладки (без safe-area) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* Движение */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Тёмная: по системе, если тема не выбрана явно… */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --paper: #0E1412;
+    --surface: #161F1B;
+    --ink: #E4EBE7;
+    --muted: #97A59F;
+    --line: #27322D;
+    --accent: #5CC29B;
+    --accent-ink: #07110D;
+    --accent-soft: #1A2B24;
+    --brass: #D7AB52;
+    --brass-soft: #2D2716;
+    --hero: #1D5A43;
+    --hero-ink: #EAF6F0;
+    --danger: #FF8A80;
+    --toast-action: #1C694C;
+    --scrim: rgb(0 0 0 / 0.55);
+    --shadow-thumb: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-float: 0 12px 32px -12px rgb(0 0 0 / 0.7);
+    color-scheme: dark;
+  }
+}
+
+/* …и выбранная явно (те же значения) */
+:root[data-theme="dark"] {
+  --paper: #0E1412;
+  --surface: #161F1B;
+  --ink: #E4EBE7;
+  --muted: #97A59F;
+  --line: #27322D;
+  --accent: #5CC29B;
+  --accent-ink: #07110D;
+  --accent-soft: #1A2B24;
+  --brass: #D7AB52;
+  --brass-soft: #2D2716;
+  --hero: #1D5A43;
+  --hero-ink: #EAF6F0;
+  --danger: #FF8A80;
+  --toast-action: #1C694C;
+  --scrim: rgb(0 0 0 / 0.55);
+  --shadow-thumb: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-float: 0 12px 32px -12px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
+}
+
+/* «Бумага»: тёплый кремовый лист и тёмно-коричневый текст; акцент и латунь — те же роли */
+:root[data-theme="sepia"] {
+  --paper: #F1E7D3;
+  --surface: #FAF4E8;
+  --ink: #33261A;
+  --muted: #6B5741;
+  --line: #DDCDB0;
+  --accent: #2A6447;
+  --accent-ink: #FFFBF2;
+  --accent-soft: #E4E4CA;
+  --brass: #875E10;
+  --brass-soft: #EED9A4;
+  --hero: #2A6447;
+  --hero-ink: #FFFBF2;
+  --danger: #A3291D;
+  --toast-action: #A9DDBF;
+  --scrim: rgb(43 30 15 / 0.4);
+  --shadow-thumb: 0 1px 2px rgb(60 40 10 / 0.14);
+  --shadow-float: 0 12px 32px -16px rgb(60 40 10 / 0.5);
+  color-scheme: light;
+}

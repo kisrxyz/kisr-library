@@ -1,0 +1,44 @@
+{
+  "name": "kisr-library",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Личная офлайн-библиотека книг от Claude (PWA)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test",
+    "migrate": "tsx scripts/migrate-from-artifact.ts",
+    "icons": "node scripts/make-icons.mjs",
+    "skill": "node scripts/pack-skill.mjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/golos-text": "^5.3.0",
+    "@fontsource-variable/literata": "^5.3.0",
+    "@fontsource-variable/unbounded": "^5.3.0",
+    "@preact/signals": "^2.11.4",
+    "dompurify": "^3.5.0",
+    "idb": "^8.0.4",
+    "marked": "^18.2.1",
+    "preact": "^11.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@preact/preset-vite": "^2.10.6",
+    "fake-indexeddb": "^6.2.8",
+    "fflate": "^0.8.3",
+    "jsdom": "^31.0.1",
+    "sharp": "^0.35.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.1",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1"
+  }
+}

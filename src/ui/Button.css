@@ -1,0 +1,105 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--size-small);
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms,
+    border-color 120ms,
+    color 120ms;
+}
+
+.btn svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.btn--ghost {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.btn--icon {
+  flex: none;
+  width: 44px;
+  padding: 0;
+}
+
+.btn--icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.btn--wide {
+  display: flex;
+  width: 100%;
+}
+
+/* Переключатель (★ избранное и т. п.) */
+.btn[aria-pressed="true"] {
+  color: var(--brass);
+}
+
+.btn--ghost[aria-pressed="true"] {
+  border-color: var(--brass);
+}
+
+.btn[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.btn--ghost:active:not(:disabled),
+.btn--plain:active:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.btn--primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 86%, var(--ink));
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn--ghost:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  }
+
+  .btn--plain:hover:not(:disabled) {
+    background: var(--accent-soft);
+  }
+
+  .btn--primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 90%, var(--ink));
+  }
+}
