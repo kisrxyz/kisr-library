@@ -121,13 +121,20 @@ export function planMerge(current: LibrarySnapshot, incoming: BackupFile): Merge
   }
 
   const ourProgress = new Map(current.progress.map((p) => [p.bookId, p]));
-  const putProgress: Progress[] = [];
+  const progressPuts = new Map<string, Progress>();
   for (const p of incoming.progress) {
-    const ours = ourProgress.get(p.bookId);
-    if (ours && p.lastReadAt <= ours.lastReadAt) continue;
+    const best = progressPuts.get(p.bookId) ?? ourProgress.get(p.bookId);
+    if (best && p.lastReadAt <= best.lastReadAt) continue;
     const meta = ourBooks.get(p.bookId);
-    putProgress.push(meta && isOutOfRange(p, meta) ? clampProgress(p, meta) : p);
+    progressPuts.set(p.bookId, meta && isOutOfRange(p, meta) ? clampProgress(p, meta) : p);
   }
+  // Книга заменена версией с другим числом глав, а наш прогресс уцелел (в файле его нет или он старше):
+  // его тоже нужно привести к новой книге, иначе он будет указывать на несуществующую главу.
+  for (const { meta } of putBooks) {
+    const survivor = progressPuts.get(meta.id) ?? ourProgress.get(meta.id);
+    if (survivor && isOutOfRange(survivor, meta)) progressPuts.set(meta.id, clampProgress(survivor, meta));
+  }
+  const putProgress = [...progressPuts.values()];
 
   const ourMarks = new Map(current.marks.map((m) => [m.id, m]));
   const putMarks = incoming.marks.filter((m) => {

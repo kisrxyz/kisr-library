@@ -29,8 +29,8 @@ function parsedOf(title: string, chapters: string[]): ParsedBook {
   };
 }
 
-function backupBookOf(title: string, id: string, updatedAt = T0): BackupBook {
-  const { meta, chapters } = buildBook(parsedOf(title, ['Раз', 'Два']), { origin: 'paste', id, now: T0 });
+function backupBookOf(title: string, id: string, updatedAt = T0, chapterNames = ['Раз', 'Два']): BackupBook {
+  const { meta, chapters } = buildBook(parsedOf(title, chapterNames), { origin: 'paste', id, now: T0 });
   const { chapters: _summaries, ...rest } = meta;
   void _summaries;
   return { ...rest, updatedAt, chapters: chapters.map((c) => ({ title: c.title, md: c.md })) };
@@ -175,6 +175,75 @@ describe('planMerge', () => {
     expect(put.chapter).toBe(2);
     expect(put.maxChapter).toBe(2);
     expect(put.chaptersDone).toEqual([1]);
+  });
+
+  describe('наш прогресс при замене книги более короткой версией', () => {
+    const five = ['1', '2', '3', '4', '5'];
+    const localBook = planMerge(emptyCurrent(), fileOf({ books: [backupBookOf('Длинная', 'dl-1', T0, five)] })).putBooks[0].meta;
+    const aheadOfShort: Progress = {
+      ...newProgress('dl-1', T0),
+      chapter: 5,
+      maxChapter: 5,
+      chaptersDone: [1, 2, 3, 4],
+      wordsRead: localBook.words - 1,
+      lastReadAt: T0 + 100,
+      blockKey: 'pabc',
+      blockIndex: 4,
+      blockOffset: 0.3,
+    };
+    const current: LibrarySnapshot = { ...emptyCurrent(), books: [localBook], progress: [aheadOfShort] };
+    const shortNewer = backupBookOf('Длинная', 'dl-1', T0 + DAY, ['1', '2', '3']);
+
+    it('прогресса нет в файле: наш прогресс ограничивается числом глав новой версии', () => {
+      const plan = planMerge(current, fileOf({ books: [shortNewer] }));
+      expect(plan.report).toEqual({ added: 0, updated: 1, skipped: 0 });
+      expect(plan.putProgress).toHaveLength(1);
+      const [p] = plan.putProgress;
+      expect(p.bookId).toBe('dl-1');
+      expect(p.chapter).toBe(3);
+      expect(p.maxChapter).toBeLessThanOrEqual(3);
+      expect(p.chaptersDone).toEqual([1, 2, 3]);
+      expect(p.lastReadAt).toBe(T0 + 100);
+      expect(p.blockKey).toBeNull();
+    });
+
+    it('прогресс есть в файле, но старше нашего: наш тоже ограничивается', () => {
+      const older: Progress = { ...newProgress('dl-1', T0), chapter: 2, lastReadAt: T0 + 50 };
+      const plan = planMerge(current, fileOf({ books: [shortNewer], progress: [older] }));
+      expect(plan.putProgress).toHaveLength(1);
+      expect(plan.putProgress[0].chapter).toBe(3);
+      expect(plan.putProgress[0].lastReadAt).toBe(T0 + 100);
+    });
+
+    it('прогресс в файле новее нашего: побеждает файл, и он тоже в границах', () => {
+      const newer: Progress = { ...newProgress('dl-1', T0), chapter: 9, maxChapter: 9, lastReadAt: T0 + 500 };
+      const plan = planMerge(current, fileOf({ books: [shortNewer], progress: [newer] }));
+      expect(plan.putProgress).toHaveLength(1);
+      expect(plan.putProgress[0].lastReadAt).toBe(T0 + 500);
+      expect(plan.putProgress[0].chapter).toBe(3);
+    });
+
+    it('наш прогресс в границах новой версии не трогается', () => {
+      const inRange: Progress = { ...aheadOfShort, chapter: 2, maxChapter: 2, chaptersDone: [1], wordsRead: 0 };
+      const plan = planMerge({ ...current, progress: [inRange] }, fileOf({ books: [shortNewer] }));
+      expect(plan.putProgress).toEqual([]);
+    });
+
+    it('книга пропущена (наша новее): наш прогресс не трогается', () => {
+      const ourNewer: BookMeta = { ...localBook, updatedAt: T0 + 5 * DAY };
+      const plan = planMerge({ ...current, books: [ourNewer] }, fileOf({ books: [shortNewer] }));
+      expect(plan.report).toEqual({ added: 0, updated: 0, skipped: 1 });
+      expect(plan.putProgress).toEqual([]);
+    });
+
+    it('после применения плана повторное слияние ничего не меняет', () => {
+      const file = fileOf({ books: [shortNewer] });
+      const after = apply(current, planMerge(current, file));
+      expect(after.progress[0].chapter).toBe(3);
+      const again = planMerge(after, file);
+      expect(again.report).toEqual({ added: 0, updated: 0, skipped: 1 });
+      expect(again.putProgress).toEqual([]);
+    });
   });
 
   it('отметки: побеждает новее updatedAt', () => {

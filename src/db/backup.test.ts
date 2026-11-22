@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BACKUP_FORMAT, BACKUP_VERSION, isBackup } from '../core/backup';
 import { newProgress } from '../core/progress';
-import type { Mark } from '../core/types';
+import type { Mark, Progress } from '../core/types';
 import { exportBackup, importBackup } from './backup';
-import { getAllBooks, getAllChapters, getChapters, saveBook } from './books';
+import { getAllBooks, getAllChapters, getChapter, getChapters, saveBook } from './books';
 import { getMarks, putMark } from './marks';
 import { getAllProgress, putProgress } from './progress';
 import { getSettings, setSettings } from './settings';
@@ -102,6 +102,45 @@ describe('exportBackup → importBackup', () => {
     expect(book.title).toBe('Книга (новая)');
     expect(book.chapters).toHaveLength(2);
     expect((await getChapters('kniga')).map((c) => c.id)).toEqual(['kniga--01', 'kniga--02']);
+  });
+
+  describe('наш прогресс опережает более короткую версию книги из файла', () => {
+    /** Локально книга из 5 глав и прогресс на главе 5; в файле та же книга из 3 глав и новее. */
+    async function setup(fileProgress: Progress[]) {
+      const long = sampleBook('Книга', 5, { id: 'kniga', now: 1000 });
+      await saveBook(long.meta, long.chapters);
+      await putProgress({ ...newProgress('kniga', 1000), chapter: 5, maxChapter: 5, chaptersDone: [1, 2, 3, 4], lastReadAt: 5000 });
+      const file = await exportBackup('t');
+
+      const short = sampleBook('Книга', 3, { id: 'kniga', now: 1000 });
+      const { chapters: _drop, ...rest } = short.meta;
+      void _drop;
+      file.books = [{ ...rest, updatedAt: 9000, chapters: short.chapters.map((c) => ({ title: c.title, md: c.md })) }];
+      file.progress = fileProgress;
+      return file;
+    }
+
+    async function expectClamped() {
+      const [p] = await getAllProgress();
+      expect(p.chapter).toBe(3);
+      expect(p.maxChapter).toBeLessThanOrEqual(3);
+      expect(p.chaptersDone).toEqual([1, 2, 3]);
+      // читалка по этой главе находит запись
+      expect((await getChapter(p.bookId, p.chapter))?.title).toBe('Глава 3');
+    }
+
+    it('в файле прогресса нет: прогресс ограничивается числом глав новой версии', async () => {
+      const file = await setup([]);
+      expect(await importBackup(file)).toEqual({ added: 0, updated: 1, skipped: 0 });
+      await expectClamped();
+    });
+
+    it('в файле прогресс старше нашего: наш тоже ограничивается', async () => {
+      const file = await setup([{ ...newProgress('kniga', 1000), chapter: 2, maxChapter: 2, lastReadAt: 2000 }]);
+      await importBackup(file);
+      await expectClamped();
+      expect((await getAllProgress())[0].lastReadAt).toBe(5000);
+    });
   });
 
   it('прогресс, отметки и задачи сливаются, настройки — только пустые', async () => {
