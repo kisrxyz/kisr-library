@@ -6,6 +6,7 @@ import { buildBook } from '../../core/book';
 import type { BookMeta } from '../../core/types';
 import { saveBook } from '../../db/books';
 import { freshDb } from '../../db/testing';
+import { navDirection } from '../../router';
 import { __resetLibraryForTests, books } from '../../state/library';
 import { __resetChaptersForTests } from './engine';
 import { SearchScreen } from './SearchScreen';
@@ -18,6 +19,8 @@ beforeEach(() => {
   __resetLibraryForTests();
   __resetChaptersForTests();
   location.hash = '#/search';
+  window.scrollTo = vi.fn(); // jsdom не умеет прокручивать
+  navDirection.value = 'initial';
   host = document.createElement('div');
   document.body.append(host);
 });
@@ -27,6 +30,8 @@ afterEach(() => {
   host.remove();
   vi.useRealTimers();
   __resetLibraryForTests();
+  navDirection.value = 'initial';
+  Reflect.deleteProperty(window, 'scrollY');
 });
 
 interface Seed {
@@ -310,5 +315,83 @@ describe('SearchScreen: результаты', () => {
     });
     await vi.waitFor(() => expect(host.querySelectorAll('.shit').length).toBe(1));
     expect(host.querySelector('.shit__book')?.textContent).toBe('Лес и вода');
+  });
+});
+
+describe('SearchScreen: прокрутка', () => {
+  const setScrollY = (y: number) => Object.defineProperty(window, 'scrollY', { value: y, configurable: true });
+
+  /** Открыть поиск, дождаться результатов, пролистать до `y` и уйти с экрана — прокрутка запомнена. */
+  async function leaveScrolled(y: number, q = 'сенека') {
+    mount(q);
+    await vi.waitFor(() => expect(host.querySelectorAll('.shit').length).toBeGreaterThan(0));
+    setScrollY(y);
+    act(() => render(null, host));
+    vi.mocked(window.scrollTo).mockClear();
+  }
+
+  it('«назад»: прокрутка возвращается, когда результаты по тексту уже отрисованы', async () => {
+    await seed(STOIC, OTHER);
+    await leaveScrolled(640);
+
+    const hitsAtScroll: number[] = [];
+    vi.mocked(window.scrollTo).mockImplementation(() => {
+      hitsAtScroll.push(host.querySelectorAll('.shit').length);
+    });
+    navDirection.value = 'pop';
+    mount('сенека');
+    // Книги видны сразу, а места в тексте ещё ищутся: прокручивать рано
+    expect(window.scrollTo).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => expect(window.scrollTo).toHaveBeenCalledTimes(1));
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 640);
+    expect(hitsAtScroll).toEqual([2]);
+    // Вернулись к результатам — клавиатура их не закрывает
+    expect(document.activeElement).not.toBe(input());
+  });
+
+  it('возврат делается один раз: следующий поиск прокрутку не трогает', async () => {
+    await seed(STOIC, OTHER);
+    await leaveScrolled(640);
+    navDirection.value = 'pop';
+    mount('сенека');
+    await vi.waitFor(() => expect(window.scrollTo).toHaveBeenCalledTimes(1));
+
+    type('лес');
+    await settle();
+    expect(window.scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('запрос изменили до конца поиска — старую прокрутку не возвращаем', async () => {
+    await seed(STOIC, OTHER);
+    await leaveScrolled(640);
+    navDirection.value = 'pop';
+    mount('сенека');
+    type('лес');
+    await settle();
+    expect(window.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('не «назад» (ссылка, вкладка): прокрутка не возвращается', async () => {
+    await seed(STOIC, OTHER);
+    await leaveScrolled(640);
+    navDirection.value = 'push';
+    mount('сенека');
+    await vi.waitFor(() => expect(host.querySelectorAll('.shit').length).toBe(2));
+    expect(window.scrollTo).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(input());
+  });
+
+  it('«назад» к пустому поиску: прокрутка возвращается сразу, поле в фокусе', async () => {
+    await seed(STOIC);
+    mount();
+    setScrollY(120);
+    act(() => render(null, host));
+    vi.mocked(window.scrollTo).mockClear();
+
+    navDirection.value = 'pop';
+    mount();
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 120);
+    expect(document.activeElement).toBe(input());
   });
 });

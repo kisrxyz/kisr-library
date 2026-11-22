@@ -1,9 +1,9 @@
 import { computed } from '@preact/signals';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { callNumbers } from '../../core/book';
 import { MIN_QUERY, TEXT_LIMIT, searchBooks, type TextHit } from '../../core/search';
 import { normalizeForSearch, plural } from '../../core/text';
-import { navigate, type RouteOf } from '../../router';
+import { navDirection, navigate, rememberScroll, restoreScroll, type RouteOf } from '../../router';
 import { books } from '../../state/library';
 import { settings } from '../../state/settings';
 import { Button } from '../../ui/Button';
@@ -46,16 +46,26 @@ export function SearchScreen({ route: current }: { route: RouteOf<'search'> }) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** Что мы сами записали в адрес: отличает нашу правку адреса от чужой (тег на странице книги, вкладка «Поиск»). */
   const written = useRef(current.q);
+  /**
+   * Экран открыт кнопкой «назад»: прокрутку вернём, когда результаты уже на месте. Сразу при открытии
+   * страница ещё короткая и прокрутка упрётся в её край. Любая правка запроса отменяет возврат.
+   */
+  const restore = useRef(navDirection.value === 'pop');
 
+  // Вернулись «назад» к найденному — клавиатура закрывала бы результаты, поле в фокус не берём
   useEffect(() => {
-    field.current?.focus();
+    if (!(restore.current && current.q)) field.current?.focus();
     return () => clearTimeout(timer.current);
   }, []);
+
+  // Прокрутка запоминается при уходе с экрана (старый экран ещё на месте)
+  useLayoutEffect(() => () => rememberScroll('search'), []);
 
   // Адрес изменил кто-то другой — поле и результаты следуют за ним
   useEffect(() => {
     if (current.q === written.current) return;
     written.current = current.q;
+    restore.current = false;
     clearTimeout(timer.current);
     setInput(current.q);
     setQuery(current.q);
@@ -64,6 +74,7 @@ export function SearchScreen({ route: current }: { route: RouteOf<'search'> }) {
   /** Принять запрос: искать и записать в адрес (запись истории заменяется — «назад» не листает буквы). */
   const commit = (value: string) => {
     clearTimeout(timer.current);
+    restore.current = false;
     setQuery(value);
     setAllBooks(false);
     written.current = value.trim();
@@ -72,6 +83,7 @@ export function SearchScreen({ route: current }: { route: RouteOf<'search'> }) {
 
   const change = (value: string) => {
     setInput(value);
+    restore.current = false;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => commit(value), DEBOUNCE_MS);
   };
@@ -111,6 +123,13 @@ export function SearchScreen({ route: current }: { route: RouteOf<'search'> }) {
   const searching = active && (text.status === 'loading' || text.q !== query);
   const capped = text.hits.length >= TEXT_LIMIT;
   const nothing = active && !searching && text.status === 'done' && bookHits.length === 0 && text.hits.length === 0;
+
+  // Возврат «назад»: прокручиваем, когда результаты по тексту уже отрисованы (до отрисовки лишь коротенькая страница)
+  useLayoutEffect(() => {
+    if (!restore.current || searching) return;
+    restore.current = false;
+    restoreScroll('search');
+  }, [searching]);
 
   // Тянут результаты — убираем клавиатуру, чтобы видеть их целиком
   const dismissKeyboard = () => {

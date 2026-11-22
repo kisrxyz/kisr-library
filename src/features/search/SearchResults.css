@@ -55,8 +55,7 @@
   background: var(--surface);
   color: var(--ink);
   text-decoration: none;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 110px;
+  /* Без content-visibility: высота карточек должна быть настоящей, иначе «назад» вернёт прокрутку не туда */
   transition:
     transform 120ms var(--ease-out),
     background-color 120ms,
