@@ -14,7 +14,7 @@ import {
 } from '../../core/library';
 import type { SortKey } from '../../core/types';
 import { navDirection, navigate, rememberScroll, restoreScroll, type RouteOf } from '../../router';
-import { books, progressMap } from '../../state/library';
+import { books, libraryReady, progressMap } from '../../state/library';
 import { settings, updateSettings } from '../../state/settings';
 import { Button } from '../../ui/Button';
 import { EmptyState } from '../../ui/EmptyState';
@@ -160,15 +160,18 @@ export function LibraryScreen({ route: current }: { route: RouteOf<'library'> })
         <Banners />
 
         {all.length === 0 ? (
-          <EmptyState
-            title="Полка пока пустая"
-            text={ONBOARDING}
-            action={
-              <Button variant="primary" icon="plus" href="#/add">
-                Добавить книгу
-              </Button>
-            }
-          />
+          // «Пустая» полка, пока книги не прочитаны из БД, — это не пустая полка: онбординг только после загрузки
+          libraryReady.value && (
+            <EmptyState
+              title="Полка пока пустая"
+              text={ONBOARDING}
+              action={
+                <Button variant="primary" icon="plus" href="#/add">
+                  Добавить книгу
+                </Button>
+              }
+            />
+          )
         ) : (
           <>
             {hero && <ContinueCard entry={hero} callNo={calls.get(hero.book.id) ?? ''} wpm={wpm} />}

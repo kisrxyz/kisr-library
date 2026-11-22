@@ -11,7 +11,13 @@ import { loadSettings } from './settings';
 
 export const books = signal<BookMeta[]>([]);
 export const progressMap = signal<Map<string, Progress>>(new Map());
+/** Книги и прогресс прочитаны из БД (полка пустая — значит, книг правда нет). */
 export const libraryReady = signal(false);
+/** При запуске хранилище не открылось: ошибка или ответа нет дольше `STARTUP_TIMEOUT_MS`. */
+export const libraryError = signal(false);
+
+/** Сколько при запуске ждать IndexedDB, прежде чем показать «Не удалось открыть хранилище». */
+export const STARTUP_TIMEOUT_MS = 8000;
 
 /** Через сколько после «Удалить» книга пропадает из БД (окно «Отменить»). */
 export const DELETE_UNDO_MS = 6000;
@@ -26,6 +32,7 @@ export function __resetLibraryForTests(): void {
   books.value = [];
   progressMap.value = new Map();
   libraryReady.value = false;
+  libraryError.value = false;
 }
 
 function upsertBook(meta: BookMeta): void {
@@ -37,6 +44,27 @@ function setProgressLocal(p: Progress): void {
   const next = new Map(progressMap.value);
   next.set(p.bookId, p);
   progressMap.value = next;
+}
+
+/**
+ * Запуск приложения: настройки и библиотека из IndexedDB. Если база не открылась или `indexedDB.open`
+ * не ответил за 8 с, ставится `libraryError`, и вместо полки показывается экран ошибки: пустая полка
+ * выглядела бы как потеря всех книг. Загрузка не отменяется — если она всё же закончится,
+ * `libraryReady` вернёт обычные экраны. Не бросает.
+ */
+export async function startLibrary(timeoutMs = STARTUP_TIMEOUT_MS): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Хранилище не ответило за ${timeoutMs} мс`)), timeoutMs);
+  });
+  try {
+    await Promise.race([Promise.all([loadSettings(), loadLibrary()]), timeout]);
+  } catch (error) {
+    console.error('Не удалось открыть хранилище', error);
+    libraryError.value = true;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Прочитать книги и прогресс из БД. Книги, ожидающие удаления, остаются скрытыми. */

@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newProgress } from '../core/progress';
 import { getAllBooks, getChapters } from '../db/books';
 import { getAllProgress, putProgress } from '../db/progress';
-import { freshDb, sampleBook } from '../db/testing';
+import { brokenDb, freshDb, hangingDb, sampleBook } from '../db/testing';
 import {
   DELETE_UNDO_MS,
+  STARTUP_TIMEOUT_MS,
   __resetLibraryForTests,
   books,
   editBookMeta,
+  libraryError,
   libraryReady,
   loadLibrary,
   progressMap,
@@ -17,6 +19,7 @@ import {
   scheduleDelete,
   setBookAction,
   setFinished,
+  startLibrary,
   toggleFavorite,
   undoDelete,
 } from './library';
@@ -57,6 +60,44 @@ describe('loadLibrary', () => {
     await loadLibrary();
     expect(books.value).toEqual([]);
     expect(libraryReady.value).toBe(true);
+  });
+});
+
+describe('startLibrary: запуск приложения', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('база открылась — библиотека готова, ошибки нет', async () => {
+    await addBook('Книга', 1, 'kniga');
+    __resetLibraryForTests();
+    await startLibrary();
+    expect(libraryReady.value).toBe(true);
+    expect(libraryError.value).toBe(false);
+    expect(books.value.map((b) => b.id)).toEqual(['kniga']);
+  });
+
+  it('база не открылась — ошибка хранилища, полка не «готова»', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    brokenDb();
+    await startLibrary();
+    expect(libraryError.value).toBe(true);
+    expect(libraryReady.value).toBe(false);
+  });
+
+  it('открытие базы повисло — через 8 секунд та же ошибка', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    hangingDb();
+    let finished = false;
+    const started = startLibrary().then(() => (finished = true));
+    await vi.advanceTimersByTimeAsync(STARTUP_TIMEOUT_MS - 1);
+    expect(finished).toBe(false);
+    expect(libraryError.value).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await started;
+    expect(libraryError.value).toBe(true);
+    expect(libraryReady.value).toBe(false);
   });
 });
 

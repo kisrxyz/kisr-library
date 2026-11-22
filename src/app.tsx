@@ -7,6 +7,7 @@ import type { ReaderScreen as ReaderScreenType } from './features/reader/ReaderS
 import { SearchScreen } from './features/search/SearchScreen';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 import { route, type Route, type RouteOf } from './router';
+import { libraryError, libraryReady } from './state/library';
 import { Button } from './ui/Button';
 import { EmptyState } from './ui/EmptyState';
 import { TabBar } from './ui/TabBar';
@@ -93,7 +94,31 @@ function ScrollToTop() {
   return null;
 }
 
+/**
+ * Хранилище не открылось при запуске. Вместо экранов — что делать: пустая полка выглядела бы как
+ * потеря всех книг, а «Удалить приложение» стёрло бы их по-настоящему.
+ */
+function StorageError() {
+  return (
+    <div class="app">
+      <main class="screen screen--alone">
+        <EmptyState
+          title="Не удалось открыть хранилище"
+          text="Книги на месте — не удаляй приложение. Закрой его и открой снова; если не поможет, перезагрузи телефон."
+          action={
+            <Button variant="primary" onClick={() => location.reload()}>
+              Перезагрузить
+            </Button>
+          }
+        />
+      </main>
+    </div>
+  );
+}
+
 export function App() {
+  // Если загрузка всё же закончится позже, `libraryReady` вернёт обычные экраны
+  if (libraryError.value && !libraryReady.value) return <StorageError />;
   const current = route.value;
   return (
     <div class="app" data-chrome={current.name === 'read' ? 'reader' : undefined}>

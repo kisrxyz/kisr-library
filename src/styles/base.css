@@ -125,6 +125,15 @@ summary,
   padding-bottom: calc(var(--safe-bottom) + 32px);
 }
 
+/* Экран без верхней панели и вкладок (хранилище не открылось): карточка посередине */
+.screen--alone {
+  display: grid;
+  align-content: center;
+  min-height: 100dvh;
+  padding-top: calc(var(--safe-top) + 16px);
+  padding-bottom: calc(var(--safe-bottom) + 32px);
+}
+
 /* Знак «Kisr Library» */
 .wordmark {
   font-family: var(--font-brand);
