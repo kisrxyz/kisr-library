@@ -1,0 +1,150 @@
+/* Карточка каталога: шифр и раздел над линией, отверстие под стержень ящика внизу */
+.bcard {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  /* Длинная полка: карточки вне экрана не раскладываются и не рисуются */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 195px;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms,
+    border-color 150ms;
+}
+
+.bcard::after {
+  content: "";
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.22);
+}
+
+.bcard:active {
+  transform: scale(0.985);
+  background: var(--accent-soft);
+}
+
+.bcard__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--accent);
+}
+
+.bcard__callno {
+  flex: none;
+  color: var(--accent);
+  font-family: var(--font-brand);
+  font-size: 0.71875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.bcard__cat {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78125rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bcard__new {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.71875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.bcard__fav {
+  display: inline-flex;
+  flex: none;
+  color: var(--brass);
+}
+
+.bcard__fav svg {
+  fill: currentColor;
+}
+
+.bcard__title {
+  margin-top: 2px;
+  font-family: var(--font-book);
+  font-size: var(--size-heading);
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.bcard__sum {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--size-small);
+  line-height: 1.45;
+  text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.bcard__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--muted);
+  font-size: 0.78125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bcard__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.bcard__progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bcard__progress .progress {
+  flex: 1;
+}
+
+.bcard__pct {
+  flex: none;
+  min-width: 2.6em;
+  color: var(--accent);
+  font-size: 0.78125rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bcard:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  }
+}

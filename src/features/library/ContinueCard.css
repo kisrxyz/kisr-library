@@ -1,0 +1,114 @@
+/* «Продолжить»: зелёная карточка. Шифр книги — крупным штампом на заднем плане, как в старом приложении. */
+.continue {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 18px 18px 16px;
+  overflow: hidden;
+  border-radius: var(--radius-hero);
+  background: var(--hero);
+  color: var(--hero-ink);
+  text-decoration: none;
+  isolation: isolate;
+  transition: transform 120ms var(--ease-out);
+}
+
+.continue:active {
+  transform: scale(0.985);
+}
+
+.continue:focus-visible {
+  outline-color: var(--ink);
+}
+
+.continue__stamp {
+  position: absolute;
+  right: -6px;
+  bottom: -14px;
+  z-index: -1;
+  font-family: var(--font-brand);
+  font-size: 4.25rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.continue__eyebrow {
+  font-size: 0.71875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.continue__shelf {
+  overflow: hidden;
+  font-size: var(--size-meta);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.continue__title {
+  max-width: 17em;
+  font-family: var(--font-book);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.22;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+
+.continue__where {
+  font-size: var(--size-small);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.continue__quote {
+  display: -webkit-box;
+  max-width: 28em;
+  overflow: hidden;
+  font-family: var(--font-book);
+  font-size: var(--size-small);
+  font-style: italic;
+  line-height: 1.45;
+  opacity: 0.92;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.continue__bar {
+  margin-top: 4px;
+  background: color-mix(in srgb, var(--hero-ink) 24%, transparent);
+}
+
+.continue__bar .progress__fill {
+  background: var(--hero-ink);
+}
+
+.continue__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.continue__go {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 12px 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--hero-ink);
+  color: var(--hero);
+  font-weight: 600;
+}

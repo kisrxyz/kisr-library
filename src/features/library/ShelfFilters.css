@@ -1,0 +1,140 @@
+.filters {
+  display: grid;
+  gap: 12px;
+}
+
+/* Пять сегментов с трёхзначными счётчиками на 390px: чуть теснее обычных */
+.filters > .seg > button {
+  gap: 3px;
+  padding: 0 4px;
+  font-size: 0.875rem;
+}
+
+.filters > .seg small {
+  font-size: 0.75rem;
+}
+
+/* Четыре длины в одну строку шторки без горизонтальной прокрутки */
+.filters__group .seg > button {
+  padding: 0 6px;
+}
+
+/*
+  Фишки разделов едут горизонтально от края до края экрана. Вертикальные поля нужны, чтобы
+  невидимая зона нажатия фишки (::after, 44px при высоте 36px) не обрезалась прокруткой.
+*/
+.filters__cats {
+  display: flex;
+  gap: 8px;
+  margin: -6px calc(-1 * max(var(--gutter), var(--safe-right))) -6px calc(-1 * max(var(--gutter), var(--safe-left)));
+  padding: 6px max(var(--gutter), var(--safe-right)) 6px max(var(--gutter), var(--safe-left));
+  overflow-x: auto;
+  scroll-padding-inline: var(--gutter);
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filters__cats::-webkit-scrollbar {
+  display: none;
+}
+
+.filters__cats > .chip {
+  scroll-snap-align: start;
+}
+
+.filters .shelf-head {
+  margin-top: 4px;
+}
+
+.filters__sort {
+  min-height: 44px;
+  margin-right: -10px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: var(--size-meta);
+}
+
+.filters__sort svg {
+  width: 18px;
+  height: 18px;
+}
+
+.filters__sort.is-on {
+  color: var(--accent);
+}
+
+.filters__group {
+  display: grid;
+  gap: 8px;
+}
+
+.filters__label {
+  color: var(--muted);
+  font-family: var(--font-brand);
+  font-size: var(--size-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.filters__hint {
+  color: var(--muted);
+  font-size: var(--size-meta);
+}
+
+.optlist {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.optlist__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--size-body);
+  text-align: left;
+  transition: background-color 120ms;
+}
+
+.optlist__item + .optlist__item {
+  border-top: 1px solid var(--line);
+}
+
+.optlist__item > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.optlist__item small {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.optlist__item svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.optlist__item[aria-checked="true"] {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.optlist__item:active {
+  background: var(--accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .optlist__item:hover {
+    background: var(--accent-soft);
+  }
+}

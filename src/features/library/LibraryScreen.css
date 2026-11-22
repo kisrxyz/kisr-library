@@ -1,0 +1,65 @@
+.shelf {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+/* Подпись блока: «Читаю сейчас», «Книги» — мелкий заголовок-надпись, как в старом приложении */
+.shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shelf-head h2 {
+  font-family: var(--font-brand);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shelf-head__count {
+  margin-left: 4px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.shelf-head__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-right: -6px;
+  padding: 0 6px;
+  font-size: var(--size-small);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.shelf__list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Пустая полка */
+.onboarding {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.3em;
+  color: var(--ink);
+}
+
+.onboarding__restore {
+  margin-top: 10px;
+  font-size: var(--size-meta);
+}

@@ -1,0 +1,71 @@
+.rnow {
+  display: grid;
+  gap: 8px;
+}
+
+/* Строки одним лотком, как ящик каталога: общая рамка, тонкие линии между строками */
+.rnow__list {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  list-style: none;
+}
+
+.rnow__list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.rrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  min-height: 56px;
+  padding: 10px 14px 12px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color 120ms;
+}
+
+.rrow:active {
+  background: var(--accent-soft);
+}
+
+.rrow__title {
+  overflow: hidden;
+  font-family: var(--font-book);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rrow__pct {
+  color: var(--accent);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.rrow__meta {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.rrow__bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  margin-top: 6px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rrow:hover {
+    background: var(--accent-soft);
+  }
+}
