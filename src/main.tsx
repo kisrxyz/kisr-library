@@ -8,5 +8,21 @@ import './styles/tokens.css';
 import './styles/base.css';
 import { render } from 'preact';
 import { App } from './app';
+import { loadLibrary } from './state/library';
+import { loadSettings } from './state/settings';
 
-render(<App />, document.getElementById('app')!);
+/**
+ * Пока настройки и библиотека читаются из IndexedDB (десятки миллисекунд), на странице только
+ * фон из токенов: экраны не показываются пустыми и не мигают. Если база недоступна, приложение
+ * всё равно открывается — с пустой полкой.
+ */
+async function start(): Promise<void> {
+  try {
+    await Promise.all([loadSettings(), loadLibrary()]);
+  } catch (error) {
+    console.error('Не удалось прочитать хранилище', error);
+  }
+  render(<App />, document.getElementById('app')!);
+}
+
+void start();
