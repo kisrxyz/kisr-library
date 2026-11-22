@@ -1,0 +1,90 @@
+/* Список глав: строки с разделителями, без собственной рамки — рамку даёт экран или шторка */
+.chapters {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chapters li + li {
+  border-top: 1px solid var(--line);
+}
+
+.chapters__row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto 1.25rem;
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 9px 4px 9px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--size-small);
+  line-height: 1.35;
+  text-align: left;
+  transition: background-color 120ms;
+}
+
+.chapters__num {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.chapters__title {
+  min-width: 0;
+  text-wrap: pretty;
+}
+
+.chapters__title--sub {
+  padding-left: 1rem;
+  color: var(--muted);
+}
+
+.chapters__min {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chapters__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+/* ○ — не дочитана, ● — текущая: кружки рисуем сами, шрифты по-разному рисуют символы */
+.chapters__dot {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+.chapters__row[data-state="current"] {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.chapters__row[data-state="current"] .chapters__dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 24%, transparent);
+  opacity: 1;
+}
+
+.chapters__row:active {
+  background: var(--accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chapters__row:hover {
+    background: var(--accent-soft);
+  }
+}

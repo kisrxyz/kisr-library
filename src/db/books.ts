@@ -10,6 +10,10 @@ export async function getAllBooks(): Promise<BookMeta[]> {
   return (await openDb()).getAll('books');
 }
 
+export async function getBook(id: string): Promise<BookMeta | undefined> {
+  return (await openDb()).get('books', id);
+}
+
 /** Главы книги по порядку чтения. */
 export async function getChapters(bookId: string): Promise<Chapter[]> {
   const chapters = await (await openDb()).getAllFromIndex('chapters', 'bookId', bookId);

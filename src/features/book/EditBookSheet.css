@@ -1,0 +1,73 @@
+/* Поля форм в шторках страницы книги */
+.bform {
+  display: grid;
+  gap: 14px;
+}
+
+.bform__field {
+  display: grid;
+  gap: 6px;
+}
+
+.bform__label {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-weight: 500;
+}
+
+.bform__input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  line-height: 1.4;
+}
+
+textarea.bform__input {
+  min-height: 120px;
+  font-family: var(--font-book);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.bform__input:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  outline-offset: 0;
+}
+
+/* Список без родной стрелки: она разная на платформах; своя — из двух границ */
+.bform__select {
+  position: relative;
+  display: block;
+}
+
+.bform__select select {
+  padding-right: 40px;
+  appearance: none;
+  -webkit-appearance: none;
+  text-overflow: ellipsis;
+}
+
+.bform__select::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 17px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  pointer-events: none;
+  transform: translateY(-70%) rotate(45deg);
+}
+
+.bform__actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}

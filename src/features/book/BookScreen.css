@@ -1,0 +1,165 @@
+.book {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 20px;
+}
+
+/* Шапка книги — карточка каталога, как на полке, только крупнее */
+.bhead {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.bhead::after {
+  content: "";
+  position: absolute;
+  bottom: 11px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.22);
+}
+
+.bhead__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 9px;
+  border-bottom: 2px solid var(--accent);
+}
+
+.bhead__callno {
+  flex: none;
+  color: var(--accent);
+  font-family: var(--font-brand);
+  font-size: 0.71875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.bhead__cat {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78125rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bhead__title {
+  margin-top: 2px;
+  font-family: var(--font-book);
+  font-size: var(--size-title);
+  font-weight: 600;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.bhead__sum {
+  color: var(--muted);
+  font-size: var(--size-small);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.bhead__meta {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.bhead__meta span {
+  white-space: nowrap;
+}
+
+.bhead__go {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.bhead__progress {
+  display: grid;
+  gap: 6px;
+}
+
+.bhead__where {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  text-wrap: pretty;
+}
+
+.bhead__left {
+  color: var(--accent);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Блоки под шапкой: мелкий заголовок-надпись, как на полке */
+.bsec {
+  display: grid;
+  gap: 10px;
+}
+
+.bsec__label {
+  font-family: var(--font-brand);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bsec__count {
+  margin-left: 4px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.bsec__card {
+  padding: 2px 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.btags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bsource {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--size-meta);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.bsource svg {
+  flex: none;
+  margin-top: 2px;
+}

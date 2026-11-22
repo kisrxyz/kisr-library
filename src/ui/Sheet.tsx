@@ -11,8 +11,8 @@ interface SheetProps {
   children?: ComponentChildren;
 }
 
-/** Совпадает с уходом `.sheet__panel` в Sheet.css. */
-const EXIT_MS = 200;
+/** Совпадает с уходом `.sheet__panel` в Sheet.css. Столько шторка остаётся на экране после закрытия. */
+export const EXIT_MS = 200;
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';

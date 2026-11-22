@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newProgress } from '../core/progress';
 import type { Mark } from '../core/types';
-import { deleteBook, getAllBooks, getAllChapters, getChapter, getChapters, saveBook, updateBookMeta } from './books';
+import { deleteBook, getAllBooks, getAllChapters, getBook, getChapter, getChapters, saveBook, updateBookMeta } from './books';
 import { getMarks, putMark } from './marks';
 import { getAllProgress, putProgress } from './progress';
 import { openDb } from './schema';
@@ -49,6 +49,13 @@ describe('saveBook / getAllBooks / getChapters', () => {
     expect((await getAllBooks()).map((b) => b.id)).toEqual(['pervaya']);
     expect((await getChapters('pervaya')).map((c) => c.order)).toEqual([1, 2, 3]);
     expect((await getChapters('pervaya')).map((c) => c.title)).toEqual(['Глава 1', 'Глава 2', 'Глава 3']);
+  });
+
+  it('getBook отдаёт одну книгу по id, а чужого id нет', async () => {
+    const { meta, chapters } = sampleBook('Первая', 2, { id: 'pervaya' });
+    await saveBook(meta, chapters);
+    expect(await getBook('pervaya')).toEqual(meta);
+    expect(await getBook('net-takoy')).toBeUndefined();
   });
 
   it('главы разных книг не смешиваются', async () => {

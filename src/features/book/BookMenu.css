@@ -1,0 +1,68 @@
+.bmenu {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bmenu li + li {
+  border-top: 1px solid var(--line);
+}
+
+.bmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--ink);
+  font-size: var(--size-body);
+  text-align: left;
+  transition: background-color 120ms;
+}
+
+.bmenu__item svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.bmenu__item:active {
+  background: var(--accent-soft);
+}
+
+.bmenu__item--danger,
+.bmenu__item--danger svg {
+  color: var(--danger);
+}
+
+.bdelete__text {
+  color: var(--muted);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.bdelete__actions {
+  display: grid;
+  gap: 8px;
+}
+
+/* Кнопка удаления: цвет ошибки, текст — цвет шторки (читается в любой теме) */
+.btn.bdelete__confirm {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+.btn.bdelete__confirm:active:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 85%, var(--ink));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bmenu__item:hover {
+    background: var(--accent-soft);
+  }
+}

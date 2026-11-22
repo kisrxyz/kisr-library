@@ -23,7 +23,7 @@ export function TopBar({ back, backLabel, title, actions }: TopBarProps) {
           <button
             type="button"
             class="topbar__back"
-            aria-label={backLabel ? `Назад: ${backLabel}` : 'Назад'}
+            aria-label={backLabel && backLabel !== 'Назад' ? `Назад: ${backLabel}` : 'Назад'}
             onClick={() => goBack(back)}
           >
             <Icon name="left" size={22} />

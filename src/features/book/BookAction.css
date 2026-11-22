@@ -1,0 +1,79 @@
+/* «Прочитано» и одно действие после книги: карточка с латунной полосой слева */
+.baction {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brass);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.baction__read {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: var(--size-meta);
+  font-weight: 600;
+}
+
+.baction__label {
+  font-family: var(--font-brand);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.baction__text {
+  font-family: var(--font-book);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+  white-space: pre-line;
+}
+
+.baction__text--done {
+  color: var(--muted);
+}
+
+.baction__hint {
+  color: var(--muted);
+  font-size: var(--size-small);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.baction__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  width: 100%;
+}
+
+/* Вся строка — зона нажатия не меньше 44px */
+.baction__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: var(--size-small);
+  font-weight: 500;
+}
+
+.baction__check input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Когда «Изменить» переносится на вторую строку, она прижимается к правому краю */
+.baction__row .btn {
+  margin-left: auto;
+}
