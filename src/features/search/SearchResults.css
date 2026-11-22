@@ -1,0 +1,167 @@
+/* Группа результатов: подпись-надпись, как «Читаю сейчас» на полке */
+.sgroup {
+  display: grid;
+  gap: 10px;
+}
+
+.sgroup[aria-busy="true"] .sres {
+  opacity: 0.55;
+  transition: opacity 150ms;
+}
+
+.sgroup__head {
+  font-family: var(--font-brand);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sgroup__count {
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.sres {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Найденное: тот же знак, что подсвечивает читалка */
+.sbook mark,
+.shit mark {
+  padding: 0 0.1em;
+  border-radius: 3px;
+  background: var(--brass-soft);
+  box-shadow: inset 0 -2px 0 var(--brass);
+  color: inherit;
+}
+
+/* Книга: строка каталога — шифр и раздел над линией, название, мелкая мета */
+.sbook,
+.shit {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 110px;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms,
+    border-color 150ms;
+}
+
+.sbook:active,
+.shit:active {
+  transform: scale(0.985);
+  background: var(--accent-soft);
+}
+
+.sbook__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent);
+}
+
+.sbook__callno {
+  flex: none;
+  color: var(--accent);
+  font-family: var(--font-brand);
+  font-size: 0.71875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.sbook__cat {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78125rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sbook__title {
+  font-family: var(--font-book);
+  font-size: var(--size-heading);
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.sbook__tags,
+.sbook__sum {
+  color: var(--muted);
+  font-size: var(--size-small);
+  line-height: 1.45;
+}
+
+.sbook__sum {
+  display: -webkit-box;
+  overflow: hidden;
+  text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.sbook__meta {
+  color: var(--muted);
+  font-size: 0.78125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Место в тексте: книга и глава, ниже — фрагмент */
+.shit__where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+}
+
+.shit__book {
+  font-family: var(--font-book);
+  font-size: var(--size-small);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.shit__chapter {
+  color: var(--muted);
+  font-size: var(--size-meta);
+}
+
+.shit__snip {
+  display: -webkit-box;
+  overflow: hidden;
+  font-family: var(--font-book);
+  font-size: var(--size-small);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sbook:hover,
+  .shit:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  }
+}

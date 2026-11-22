@@ -1,0 +1,99 @@
+/* Поле поиска прилипает под верхней панелью: результаты листаются, а запрос всегда под рукой */
+.screen.ssearch {
+  padding-top: 0;
+}
+
+.sfield {
+  position: sticky;
+  top: calc(var(--safe-top) + var(--bar-h));
+  z-index: 10;
+  padding: 12px 0;
+  background: var(--paper);
+}
+
+.sfield__box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  transition: border-color 150ms;
+}
+
+.sfield__box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.sfield__icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.sfield__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 6px;
+  border: 0;
+  background: none;
+  /* 16px и больше: иначе iOS увеличивает страницу при фокусе */
+  font-size: max(16px, 1em);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.sfield__input:focus {
+  outline: none;
+}
+
+.sfield__input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* Свой «×» вместо встроенного: он одинаков во всех браузерах и достаточно крупный для пальца */
+.sfield__input::-webkit-search-cancel-button,
+.sfield__input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.sfield__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--muted);
+  transition: background-color 120ms;
+}
+
+.sfield__clear:active {
+  background: var(--accent-soft);
+}
+
+.sbody {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.sbody__note {
+  color: var(--muted);
+  font-size: var(--size-small);
+  text-wrap: pretty;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sfield__clear:hover {
+    background: var(--accent-soft);
+  }
+}
