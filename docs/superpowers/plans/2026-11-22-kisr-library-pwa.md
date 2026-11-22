@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Интерфейс только по-русски, на «ты», с типографскими знаками («ёлочки», —, …, неразрывный пробел перед «мин»). Английских строк в UI нет.
-- Книги и личные данные никогда не попадают в git и в `public/`: `migration/` и `*backup*.json` в `.gitignore`. Фикстуры тестов синтетические. Тесты на реальных данных пропускаются, если нет `migration/raw` (`describe.skipIf(!existsSync(...))`).
+- Книги и личные данные никогда не попадают в git и в `public/`: `migration/`, `kisr-library/` и `*backup*.json` в `.gitignore`. Никогда не делать `git add -A` / `git add .` — добавлять файлы поимённо. Фикстуры тестов синтетические. Тесты на реальных данных пропускаются, если нет `migration/raw` (`describe.skipIf(!existsSync(...))`).
 - Деление на главы — ровно как `normalizeMd` старого приложения (`docs/book-format.md`, «Что приложение прощает»).
 - Ключи блоков — ровно по spec §8.3 (`hash` = djb2 → base36; `hash("Привет, мир") === "5v995x"`, `hash("") === "45h"`, `hash("abc") === "3772q3"`).
 - Слова `/[\p{L}\p{N}]+/gu`; скорость по умолчанию 180 слов/мин; минуты `max(1, ceil(words / wpm))`.
@@ -193,18 +193,20 @@ expect(countTasks('- [ ] один\n- [x] два\n* [ ] три\n- обычный'
 
 ### Task 4: Перенос из старого приложения
 
+Источники и правила — spec §13. Тексты берутся из `kisr-library/data/library.json`, прогресс — из `kisr-library/data/user-state.json` плюс `migration/raw/data/users/me/r-*.json` (по книге побеждает бо́льший `at`), даты книг — из `migration/raw/articles` и `pa-*`.
+
 **Files:**
-- Create: `src/migration/convertArtifact.ts`, `src/migration/convertArtifact.test.ts`, `src/migration/__fixtures__/raw-mini/` (синтетическая мини-выгрузка той же структуры: 2 статьи, 5 глав, 1 `pa-`/`ps-` книга, 1 `r-`, `prefs`, 1 `bk-`), `scripts/migrate-from-artifact.ts`
+- Create: `src/migration/convertArtifact.ts`, `src/migration/convertArtifact.test.ts`, `src/migration/__fixtures__/old-mini/` (синтетика той же структуры: `library.json` с 3 книгами, одна `private: true`; `user-state.json` с 2 записями `reading`; `raw/articles/*.json`, `raw/sections/*.json`, `raw/data/users/me/{r-*.json,prefs.json,bk-*.json}`, где один `r-` старее, чем запись в `user-state`, а другой новее), `scripts/migrate-from-artifact.ts`
 
 **Interfaces:**
-- Consumes: `buildBook`-счётчики (`countWords`, `countCards`, `countTasks`, `contentHashOf`), `percentOf`, `chapterStartWords`, `BackupFile`, `BACKUP_FORMAT`, `BACKUP_VERSION`.
-- Produces: `interface ArtifactExport {articles: Record<string, any>[]; sections: Record<string, any>[]; user: Record<string, any>[] /* документы data/users/me с полем __id */}`; `readArtifactDir(dir: string): ArtifactExport` (Node fs; `__id` = имя файла без `.json`); `convertArtifact(raw: ArtifactExport, now: number): {backup: BackupFile; summary: {books: number; chapters: number; words: number; progress: number}}`
+- Consumes: `countWords`, `countCards`, `countTasks`, `contentHashOf`, `percentOf`, `chapterStartWords`, `BackupFile`, `BACKUP_FORMAT`, `BACKUP_VERSION`, `DEFAULT_SETTINGS`.
+- Produces: `interface OldBook {id: string; title: string; category: string; tags: string[]; summary: string; source: string; created: string /* YYYY-MM-DD */; private: boolean; sections: {title: string; md: string}[]}`; `interface OldRead {articleId: string; order: number; key?: string; max?: number; pin?: boolean; done?: boolean; doneAt?: number | null; act?: string; actDone?: boolean; at: number}`; `interface OldSources {books: OldBook[]; reads: OldRead[]; prefs: {size?: number; mode?: string}; dates: Record<string, {createdAt?: number; updatedAt?: number}>; rawSectionTitles: Record<string, string[] /* названия глав по order из migration/raw */>}`; `readOldSources(root: string): OldSources` (Node fs; отсутствующий `migration/raw` → пустые `dates`/`rawSectionTitles`, только `user-state`); `mergeReads(a: OldRead[], b: OldRead[]): OldRead[]` (по `articleId` побеждает бо́льший `at`); `convertOld(src: OldSources, now: number): {backup: BackupFile; summary: {books: number; chapters: number; words: number; progress: number}}`
 
-- [ ] **Step 1: Падающий тест на мини-выгрузке:** 3 книги (2 + 1 личная `pa-`), `bk-` не перенесён; главы по `order`, id `${articleId}--NN`; у книги из `r-` прогресс `chapter = order`, `maxChapter = max`, `blockKey = key`, `status: 'reading'`, `lastReadAt = at`, `percent = percentOf(meta, chapterStartWords(meta, order))`; `pin: true` → `favorite: true`; `settings.fontSize === 18`; `origin === 'migration'`, `addedAt === now`, `createdAt` из статьи.
+- [ ] **Step 1: Падающие тесты на мини-выгрузке:** 3 книги, `bk-` не перенесён; главы по порядку, id `${id}--NN`; `mergeReads` берёт более новую запись; прогресс `chapter = order`, `maxChapter = max`, `blockKey = key`, `status: 'reading'` (или `'finished'` при `done`), `lastReadAt = at`, `percent = percentOf(meta, chapterStartWords(meta, chapter))`; `pin: true` → `favorite: true`; непустой `act` → `action.text`; если в `rawSectionTitles` глава `order` называется иначе, чем глава `order` в книге, `chapter` указывает на главу с тем же названием; `settings.fontSize === 18`; `origin === 'migration'`, `addedAt === now`, `createdAt` из `dates`, иначе из `created`.
 
-- [ ] **Step 2: Тест на реальных данных** (`describe.skipIf(!existsSync('migration/raw'))`): `summary.books === 23`, `summary.progress === 5`, ни одна глава не пустая, у `carnegie-shpargalka` `favorite === true` и `blockKey === 'p1i6upg5'`.
+- [ ] **Step 2: Тест на реальных данных** (`describe.skipIf(!existsSync('kisr-library/data/library.json'))`): `summary.books === 23`, `summary.progress >= 6`, ни одна глава не пустая, у `carnegie-shpargalka` `favorite === true` и `blockKey === 'p1i6upg5'`, у `vstuplenie-mwkhjndt` `chapter === 5` (запись `user-state` новее, чем `r-`).
 
-- [ ] **Step 3: Запустить** → падает. **Step 4: Реализовать** `convertArtifact.ts` и скрипт: он читает `migration/raw`, пишет `migration/kisr-library-backup-migrated.json` и печатает сводку. **Step 5:** `npm test` → PASS; `npm run migrate` → «книг 23, глав …, прогресс 5», файл создан. Проверить `git status`: файла в индексе нет (он под `.gitignore`).
+- [ ] **Step 3: Запустить** → падает. **Step 4: Реализовать** `convertArtifact.ts` и скрипт: он читает `kisr-library/` и `migration/raw`, пишет `migration/kisr-library-backup-migrated.json` и печатает сводку. **Step 5:** `npm test` → PASS; `npm run migrate` → «книг 23, глав …, прогресс 6», файл создан. Проверить `git status`: в индексе нет ни файла, ни чего-либо из `kisr-library/` (оба под `.gitignore`).
 
 - [ ] **Step 6: Commit** `feat(migration): convert old artifact export into a backup file` (только код и синтетические фикстуры).
 

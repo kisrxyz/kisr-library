@@ -16,3 +16,6 @@ Thumbs.db
 .env
 .env.*
 .claude/settings.local.json
+
+# Выгрузка старой библиотеки от владельца (личные тексты)
+kisr-library/

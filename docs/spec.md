@@ -300,10 +300,13 @@ key = первая буква tagName в нижнем регистре + hash(ow
 
 ## 13. Перенос из старого приложения
 
-- Источник: `migration/raw/` — выгрузка базы артефакта: `articles/*.json` (21), `sections/*.json` (146), `data/users/me/*.json` (`pa-*`/`ps-*` — 2 личные книги и их главы; `r-*` — прогресс 5 книг; `prefs`; `bk-*` — старые полные копии, **не переносим**, сохраняются только в raw).
-- Скрипт `scripts/migrate-from-artifact.mjs` создаёт `migration/kisr-library-backup-migrated.json` в формате §10.6:
-  - книги — 21 + 2, главы из `sections`/`ps-*` по `order`; `origin: 'migration'`; слова и карточки пересчитываются функциями `src/core`; `createdAt`/`updatedAt` берутся из старых данных; `addedAt` = время миграции;
-  - прогресс из `r-*`: `chapter = order`, `maxChapter = max`, `blockKey = key`, `status = done ? 'finished' : 'reading'`, `lastReadAt = at`; `percent`/`wordsRead` считаются как «слова глав до текущей»; `pin: true` превращается в `favorite: true`;
+- Источники (оба локальные, оба в `.gitignore`):
+  - **`kisr-library/`** — выгрузка, которую владелец сделал сам 22.11.2026: `data/library.json` (23 книги: `id, title, category, tags, summary, source, created, private, sections: [{title, md}]`; уже почищена — убраны 3 пустых раздела «Часть …») и `data/user-state.json` (`reading: [{articleId, order, key, max, pin?, done?, act?, at}]`, `prefs`, пустые `favorites`/`notes`/`tasks_done`). Это **главный источник текстов**.
+  - **`migration/raw/`** — снимок базы артефакта (`articles`, `sections`, `data/users/me`: `pa-*`/`ps-*`, `r-*`, `prefs`, `bk-*`). Из него берётся прогресс (`r-*`) и `createdAt`/`updatedAt` книг. `bk-*` не переносим.
+- Прогресс = объединение `user-state.json → reading` и `r-*`, по каждой книге побеждает бо́льший `at`. Перед выдачей файла владельцу снимок `migration/raw/data/users/me` обновляется свежей выгрузкой через `ArtifactData`: владелец продолжает читать в старом приложении.
+- Скрипт `scripts/migrate-from-artifact.ts` создаёт `migration/kisr-library-backup-migrated.json` в формате §10.6:
+  - книги — 23 (из них 2 личные, `private: true`), главы из `sections` по порядку; `origin: 'migration'`; слова, карточки и задачи пересчитываются функциями `src/core`; `createdAt`/`updatedAt` — из `migration/raw/articles`, а если их нет — из `created`; `addedAt` = время миграции;
+  - прогресс: `chapter = order`, `maxChapter = max`, `blockKey = key`, `status = done ? 'finished' : 'reading'`, `lastReadAt = at`; `percent`/`wordsRead` считаются как «слова глав до текущей»; `pin: true` превращается в `favorite: true`; `act` становится `action`, если не пустое. Если глава с номером `order` в почищенной книге называется иначе, чем в `migration/raw/sections`, глава ищется по названию;
   - настройки: `fontSize = prefs.size` (18), тема `auto`.
 - Скрипт печатает сводку (книг, глав, слов, прогрессов) и проверяет, что в результате нет пустых глав.
 - Доставка на телефон: владелец пересылает файл себе (Telegram/почта/iCloud), открывает в установленном приложении «Ещё → Восстановить из копии». Файл в репозиторий не попадает.
