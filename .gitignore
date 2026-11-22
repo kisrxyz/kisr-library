@@ -2,6 +2,7 @@
 /migration/
 *.kisr-backup.json
 kisr-library-backup-*.json
+*backup*.json
 
 node_modules/
 dist/
