@@ -398,7 +398,9 @@ export function parseBook(raw: string, opts: { fileName?: string } = {}): Parsed
   const part = parsePart(meta.part);
   if (part) book.part = part;
 
-  if (!chapters.some((c) => countCards(c.md) > 0)) warnings.push('Карточек нет');
+  // Карточки стоят в последней части: у не последней (или с неизвестным числом частей) их может не быть.
+  const nonFinalPart = !!part && (!part.of || part.n < part.of);
+  if (!nonFinalPart && !chapters.some((c) => countCards(c.md) > 0)) warnings.push('Карточек нет');
   return book;
 }
 

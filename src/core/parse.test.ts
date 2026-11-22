@@ -272,6 +272,26 @@ describe('parseBook: предупреждения', () => {
     const b = parseBook('---\ntitle: Т\ncategory: К\n---\n## Г\nтекст');
     expect(b.warnings).toContain('Карточек нет');
   });
+  describe('«Карточек нет» и книга частями', () => {
+    const part = (p: string) => parseBook(`---\ntitle: Т\ncategory: К\npart: ${p}\n---\n## Г\nтекст`).warnings;
+    it('не последняя часть (1/3, 2/3) без карточек — без предупреждения', () => {
+      expect(part('1/3')).not.toContain('Карточек нет');
+      expect(part('2/3')).not.toContain('Карточек нет');
+    });
+    it('часть без числа частей (part: 1) — без предупреждения: последняя часть неизвестна', () => {
+      expect(part('1')).not.toContain('Карточек нет');
+    });
+    it('последняя часть (3/3) без карточек — предупреждение остаётся', () => {
+      expect(part('3/3')).toContain('Карточек нет');
+    });
+    it('часть 1/1 — это последняя часть: предупреждение остаётся', () => {
+      expect(part('1/1')).toContain('Карточек нет');
+    });
+    it('не последняя часть с карточками тоже без предупреждения', () => {
+      const raw = '---\ntitle: Т\npart: 1/2\n---\n## Карточки\n```cards\nQ: а\nA: б\n```';
+      expect(parseBook(raw).warnings).toEqual([]);
+    });
+  });
   it('на пустом тексте не падает', () => {
     const b = parseBook('');
     expect(b.chapters.length).toBeGreaterThanOrEqual(1);

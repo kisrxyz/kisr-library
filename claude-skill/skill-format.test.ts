@@ -153,6 +153,34 @@ describe('шаблон внутри SKILL.md', () => {
   });
 });
 
+describe('книга частями (шапка части из SKILL.md)', () => {
+  /** Пример шапки второй части из трёх: первый блок ```text … ``` в разделе «Длинная книга». */
+  const partHeader = skill.match(/```text\n([\s\S]*?)\n```/)?.[1] ?? '';
+  const section =
+    '\n\nПовтор через неделю закрепляет то, что осталось после первого дня. Пример: слова, выученные во вторник, в следующий вторник узнаёшь заметно легче.\n';
+
+  it('пример шапки найден и содержит part: 2/3', () => {
+    expect(partHeader.startsWith('---\ntitle:')).toBe(true);
+    expect(partHeader).toMatch(/^part: 2\/3$/m);
+  });
+
+  it('часть 2/3 по примеру из скилла (без карточек и источников) разбирается без предупреждений', () => {
+    const book = parseBook(partHeader + section);
+    expect(book.title).toBe('Как работает память');
+    expect(book.part).toEqual({ n: 2, of: 3 });
+    expect(book.chapters.map((c) => c.title)).toEqual(['Как расставить повторения']);
+    expect(book.warnings).toEqual([]);
+  });
+
+  it('последняя часть 3/3 с карточками тоже без предупреждений', () => {
+    const cards =
+      '\n\n## Карточки\n```cards\nQ: Что такое кривая забывания?\nA: График потери выученного со временем.\n```\n';
+    const book = parseBook(partHeader.replace('part: 2/3', 'part: 3/3') + section + cards);
+    expect(book.part).toEqual({ n: 3, of: 3 });
+    expect(book.warnings).toEqual([]);
+  });
+});
+
 describe('SKILL.md', () => {
   it('YAML-шапка: то же имя, что у старого скилла, и описание по-русски', () => {
     const head = skill.match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? '';
@@ -163,10 +191,26 @@ describe('SKILL.md', () => {
     for (const word of ['Kisr Library', 'исследовани', 'карточ', 'вставк']) expect(description).toContain(word);
   });
 
+  it('описание привязано к библиотеке: не срабатывает на обычное «разбери тему»', () => {
+    const description = skill.match(/^description: "(.*)"$/m)?.[1] ?? '';
+    expect(description).toContain('«для библиотеки»');
+    expect(description).toContain('«для Kisr Library»');
+    expect(description).toMatch(/Не используй для обычного «разбери тему»/);
+    expect(description).not.toMatch(/Используй, когда просят разобрать тему/);
+  });
+
   it('учит правилам выдачи: только книга, длинная — файлом или частями', () => {
     expect(skill).toContain('part: N/M');
     expect(skill).toContain('<slug>.md');
     expect(skill).toContain('5000');
+    expect(skill).toContain('прямо в чате'); // просят текст в чате, а не файлом — частями
+  });
+
+  it('чек-лист перед отправкой различает режимы: целая книга, части, файл, несколько книг', () => {
+    const checklist = skill.slice(skill.indexOf('### Проверь перед отправкой'));
+    expect(checklist).not.toBe('');
+    for (const mode of ['Книга целиком', 'Первая часть', 'Средняя часть', 'Последняя часть', 'Режим файла', 'Несколько книг'])
+      expect(checklist).toContain(mode);
   });
 
   it('не тащит старое: базу данных артефакта, pack.py, пути А/Б, адрес артефакта', () => {
