@@ -15,6 +15,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="Личная библиотека книг от Claude: читать офлайн с того места, где остановился." />
     <title>Kisr Library</title>
+    <!-- Тема до первой отрисовки: настройки приходят из IndexedDB позже, и тёмная тема успела бы мигнуть светлой.
+         Значение зеркалит src/state/settings.ts (ключ kisr-theme); «авто» и сбой хранилища — тема по системе. -->
+    <script>
+      try {
+        var theme = localStorage.getItem('kisr-theme');
+        if (theme === 'light' || theme === 'dark' || theme === 'sepia') document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

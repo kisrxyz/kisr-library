@@ -12,6 +12,21 @@ const MAX_SIZE = 24;
 
 const hasDom = () => typeof document !== 'undefined';
 
+/**
+ * Куда зеркалится тема. Настройки читаются из IndexedDB асинхронно, и без зеркала страница
+ * успевает мигнуть светлой темой; маленький скрипт в `index.html` читает этот ключ до первой
+ * отрисовки. Источник правды остаётся база: `loadSettings` выравнивает зеркало по ней.
+ */
+export const THEME_STORAGE_KEY = 'kisr-theme';
+
+function mirrorTheme(theme: Settings['theme']): void {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // приватный режим, запрет на хранение сайта или нет localStorage (тесты в Node): зеркало необязательно
+  }
+}
+
 /** Значение `--paper` на `<html>` сейчас → в `<meta name="theme-color">` (цвет строки состояния и «шапки» PWA). */
 function syncThemeColor(): void {
   const paper = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim();
@@ -53,6 +68,7 @@ export async function loadSettings(): Promise<void> {
   const loaded = await getSettings();
   settings.value = loaded;
   applySettings(loaded);
+  mirrorTheme(loaded.theme);
 }
 
 /** Изменить настройки: сигнал и страница обновляются сразу, затем запись в БД. */
@@ -60,5 +76,6 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
   const next = { ...settings.value, ...patch };
   settings.value = next;
   applySettings(next);
+  if (patch.theme !== undefined) mirrorTheme(next.theme);
   await setSettings(patch);
 }

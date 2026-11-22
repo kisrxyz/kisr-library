@@ -1,0 +1,196 @@
+/* «Заметки»: отметки по книгам и действия после книг */
+
+.notes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 16px;
+}
+
+.notes__list {
+  display: grid;
+  gap: 22px;
+}
+
+.notes__summary {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Группа: книга и её отметки ---------- */
+
+.ngroup {
+  display: grid;
+  gap: 10px;
+}
+
+.ngroup__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ngroup__title {
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink);
+  font-family: var(--font-book);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: none;
+  text-wrap: balance;
+}
+
+.ngroup__count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.ngroup__items {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---------- Отметка ---------- */
+
+.mark {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms;
+}
+
+.mark:active {
+  transform: scale(0.985);
+  background: var(--accent-soft);
+}
+
+.mark__text {
+  display: -webkit-box;
+  padding-left: 12px;
+  overflow: hidden;
+  border-left: 3px solid color-mix(in srgb, var(--muted) 45%, var(--line));
+  font-family: var(--font-book);
+  font-size: var(--size-body);
+  line-height: 1.55;
+  text-wrap: pretty;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+}
+
+/* Отмеченный абзац — латунная полоса и фон, как в читалке */
+.mark__text--hl {
+  padding: 8px 12px;
+  border-left-color: var(--brass);
+  border-radius: 0 8px 8px 0;
+  background: var(--brass-soft);
+}
+
+.mark__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--size-small);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.mark__note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--brass);
+}
+
+.mark__meta {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  line-height: 1.4;
+}
+
+/* ---------- Действие ---------- */
+
+.action {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 2px 16px 6px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brass);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.action__book {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-family: var(--font-book);
+  font-size: var(--size-body);
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.action__text {
+  font-family: var(--font-book);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+  white-space: pre-line;
+}
+
+.action--done .action__text {
+  color: var(--muted);
+}
+
+/* Вся строка — зона нажатия не меньше 44px */
+.action__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: var(--size-small);
+  font-weight: 500;
+}
+
+.action__check input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ngroup__title:hover,
+  .action__book:hover {
+    text-decoration: underline;
+  }
+
+  .mark:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  }
+}

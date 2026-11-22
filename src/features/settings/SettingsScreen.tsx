@@ -1,16 +1,23 @@
-import { EmptyState } from '../../ui/EmptyState';
 import { TopBar } from '../../ui/TopBar';
+import { AboutSection } from './AboutSection';
+import { AppearanceSection, ReadingSection } from './AppearanceSection';
+import { DataSection } from './DataSection';
+import { HelpSection } from './HelpSection';
+import { StatsSection } from './StatsSection';
+import './settings.css';
 
-// Заглушка: настройки, копии и помощь делает задача 12.
+/** «Ещё» (spec §10.7): внешний вид, чтение, данные, статистика, помощь, о приложении. */
 export function SettingsScreen() {
   return (
     <>
       <TopBar title="Ещё" />
-      <main class="screen">
-        <EmptyState
-          title="Настройки"
-          text="Здесь будут тема и шрифт, резервные копии, статистика и помощь."
-        />
+      <main class="screen settings">
+        <AppearanceSection />
+        <ReadingSection />
+        <DataSection />
+        <StatsSection />
+        <HelpSection />
+        <AboutSection />
       </main>
     </>
   );
