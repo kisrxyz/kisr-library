@@ -1,0 +1,423 @@
+/*
+  Читалка (spec §8.1): панель с названием и «Глава N из M», текст главы, конец главы, плашка прогресса.
+  Панель и плашка прячутся сдвигом (transform) — раскладка и место чтения не меняются.
+  При prefers-reduced-motion переходы выключены глобально (base.css). Цвета — только токены.
+*/
+
+/* ---------- Панель ---------- */
+
+.rbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-top: var(--safe-top);
+  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  -webkit-backdrop-filter: saturate(1.2) blur(12px);
+  backdrop-filter: saturate(1.2) blur(12px);
+  transition: transform 240ms var(--ease-out);
+}
+
+/* Полоса под вырезом экрана остаётся: текст не уходит под часы */
+.rbar[data-hidden] {
+  transform: translateY(calc(-100% + var(--safe-top)));
+  transition: transform 180ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Фокус с клавиатуры внутри панели — панель на виду */
+.rbar:focus-within {
+  transform: none;
+}
+
+.rbar__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  height: var(--bar-h);
+  margin: 0 auto;
+  padding: 0 max(4px, var(--safe-right)) 0 max(4px, var(--safe-left));
+}
+
+.rbar__btn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--ink);
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms;
+}
+
+.rbar__back {
+  color: var(--accent);
+}
+
+.rbar__aa {
+  font-family: var(--font-book);
+  font-size: 1.1875rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.rbar__btn:active {
+  background: var(--accent-soft);
+  transform: scale(0.95);
+}
+
+.rbar__titles {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+  padding: 0 6px 0 2px;
+}
+
+.rbar__book {
+  overflow: hidden;
+  font-size: var(--size-small);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rbar__chapter {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+/* Линия прогресса книги — она же нижняя граница панели */
+.rbar .rbar__progress {
+  height: 2px;
+  border-radius: 0;
+  background: var(--line);
+}
+
+.rbar .rbar__progress .progress__fill {
+  border-radius: 0;
+}
+
+/* ---------- Глава ---------- */
+
+/* Снизу место под плашку прогресса, чтобы она не закрывала «Дальше» */
+.app[data-chrome="reader"] main.rscreen {
+  padding-top: 22px;
+  padding-bottom: calc(var(--safe-bottom) + 88px);
+}
+
+/* Пока место не восстановлено, текст не показываем: глава появляется сразу там, где остановился */
+.rscreen[data-state="loading"] .rbody,
+.rscreen[data-state="shown"] .rbody {
+  visibility: hidden;
+}
+
+.rchap__head {
+  max-width: 40rem;
+  margin-bottom: 24px;
+}
+
+/* Короткая черта под названием — как разделитель в карточке каталога */
+.rchap__head::after {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 2px;
+  margin-top: 14px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.rchap__title {
+  font-family: var(--font-book);
+  font-size: 1.625rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+/* Фокус на название ставит сама читалка после перехода в другую главу — это не элемент управления */
+.rchap__title:focus {
+  outline: none;
+}
+
+.rchap__meta {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* «Стражник» конца главы: когда он в кадре, глава дочитана */
+.rchap__end {
+  height: 1px;
+}
+
+/* ---------- Конец главы ---------- */
+
+.rend {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: 40rem;
+  margin-top: 28px;
+}
+
+.rend__next {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  min-height: 88px;
+  padding: 16px 14px 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 150ms,
+    border-color 150ms;
+}
+
+.rend__eyebrow {
+  grid-column: 1;
+  color: var(--accent);
+  font-family: var(--font-brand);
+  font-size: var(--size-label);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.rend__title {
+  grid-column: 1;
+  font-family: var(--font-book);
+  font-size: var(--size-heading);
+  font-weight: 600;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.rend__min {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+.rend__arrow {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  color: var(--accent);
+}
+
+.rend__next:active {
+  background: var(--accent-soft);
+  transform: scale(0.985);
+}
+
+.rend__prev {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin-left: -6px;
+  padding: 0 12px 0 6px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--muted);
+  font-size: var(--size-small);
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+
+.rend__prev:active {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* ---------- Блок завершения ---------- */
+
+.rfin {
+  display: grid;
+  gap: 10px;
+  max-width: 40rem;
+  margin-top: 28px;
+  padding: 16px 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brass);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.rfin__title {
+  font-family: var(--font-book);
+  font-size: var(--size-heading);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rfin__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: var(--size-small);
+  font-weight: 600;
+}
+
+.rfin__hint {
+  color: var(--muted);
+  font-size: var(--size-small);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.rfin__form,
+.rfin__field,
+.rfin__act {
+  display: grid;
+  gap: 8px;
+}
+
+.rfin__label {
+  font-size: var(--size-small);
+  font-weight: 600;
+}
+
+.rfin__input {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-book);
+  font-size: max(16px, 1rem);
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.rfin__input::placeholder {
+  color: var(--muted);
+}
+
+.rfin__input:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.rfin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rfin__text {
+  font-family: var(--font-book);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  white-space: pre-line;
+  text-wrap: pretty;
+}
+
+.rfin__text--done {
+  color: var(--muted);
+}
+
+.rfin__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+/* Вся строка — зона нажатия не меньше 44px */
+.rfin__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: var(--size-small);
+  font-weight: 500;
+}
+
+.rfin__check input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.rfin__row .btn {
+  margin-left: auto;
+}
+
+.rfin__back {
+  justify-self: start;
+}
+
+/* ---------- Плашка «42% · ещё 14 мин» ---------- */
+
+.rpill {
+  position: fixed;
+  bottom: calc(var(--safe-bottom) + 12px);
+  left: 50%;
+  z-index: 25;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: saturate(1.2) blur(12px);
+  backdrop-filter: saturate(1.2) blur(12px);
+  box-shadow: var(--shadow-thumb);
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+  /* Сквозь плашку можно нажать на абзац под ней */
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: transform 240ms var(--ease-out);
+}
+
+.rpill[data-hidden] {
+  transform: translate(-50%, calc(100% + 16px + var(--safe-bottom)));
+  transition: transform 180ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rbar__btn:hover {
+    background: var(--accent-soft);
+  }
+
+  .rend__next:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  }
+
+  .rend__prev:hover {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+}

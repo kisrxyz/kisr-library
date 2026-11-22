@@ -12,8 +12,9 @@
   pointer-events: none;
 }
 
+/* В читалке вкладок нет; тост стоит над плашкой «42% · ещё 14 мин» (reader.css) */
 .app[data-chrome="reader"] .toasts {
-  bottom: calc(var(--safe-bottom) + 16px);
+  bottom: calc(var(--safe-bottom) + 58px);
 }
 
 .toast {
