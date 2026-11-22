@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { isBackup, type BackupFile } from '../../core/backup';
 import { formatDate, plural } from '../../core/text';
+import type { BookMeta, Progress, Settings } from '../../core/types';
 import { exportBackup, importBackup } from '../../db/backup';
-import { books, reloadAfterRestore } from '../../state/library';
+import { books, progressMap, reloadAfterRestore } from '../../state/library';
 import { settings, updateSettings } from '../../state/settings';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { EXIT_MS, Sheet } from '../../ui/Sheet';
 import { shareOrDownload } from '../../ui/share';
 import { toast } from '../../ui/Toast';
-import { backupFileName, formatBytes, lastBackupLine } from './format';
+import { backupFileName, backupStamp, formatBytes, lastBackupLine } from './format';
 import { Section } from './Section';
 import { APP_VERSION } from './version';
 
@@ -19,17 +20,85 @@ interface Notice {
   text: string;
 }
 
+/** Файл копии, выбранный для восстановления, и время, которое мы ему припишем (см. `backupStamp`). */
+interface Picked {
+  file: BackupFile;
+  stamp: number;
+}
+
+/** От чего собран подготовленный файл: если что-то из этого изменилось, файл устарел. */
+type Source = readonly [BookMeta[], Map<string, Progress>, Settings];
+
+interface Prepared {
+  file: File;
+  bookCount: number;
+  source: Source;
+}
+
+/** Пауза перед пересборкой файла после изменений: серия правок собирает его один раз. */
+const PREPARE_DELAY_MS = 500;
+
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const currentSource = (): Source => [books.peek(), progressMap.peek(), settings.peek()];
+const sameSource = (a: Source, b: Source) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+
+async function buildBackup(source: Source): Promise<Prepared> {
+  const data = await exportBackup(`kisr-library@${APP_VERSION}`);
+  const file = new File([JSON.stringify(data)], backupFileName(new Date(data.exportedAt)), { type: 'application/json' });
+  return { file, bookCount: data.books.length, source };
+}
 
 /** «Данные»: резервная копия, восстановление, место на устройстве. */
 export function DataSection() {
+  // Читаем сигналы при отрисовке: экран следит за изменениями, а файл копии пересобирается
+  const allBooks = books.value;
+  const progress = progressMap.value;
+  const current = settings.value;
+
   const [busy, setBusy] = useState<Busy>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [file, setFile] = useState<BackupFile | null>(null);
+  const [picked, setPicked] = useState<Picked | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Первая подготовка файла копии закончилась (удачно или нет): до этого под кнопкой «Готовлю копию…»
+  const [primed, setPrimed] = useState(false);
   // После копии и восстановления занятое место меняется
   const [storageTick, setStorageTick] = useState(0);
   const picker = useRef<HTMLInputElement>(null);
+  // Двойной тап не должен запускать копию или восстановление дважды: состояние `busy` обновится только при следующей отрисовке
+  const working = useRef(false);
+  const prepared = useRef<Prepared | null>(null);
+  const firstRun = useRef(true);
+
+  /**
+   * Файл копии собирается заранее и по каждому изменению библиотеки или настроек (с паузой). Тогда нажатие
+   * сразу отдаёт готовый файл в «Поделиться»: iOS разрешает его только сразу после нажатия, а на сборку
+   * копии и `JSON.stringify` жест может «протухнуть».
+   */
+  useEffect(() => {
+    const source: Source = [allBooks, progress, current];
+    prepared.current = null;
+    let alive = true;
+    const delay = firstRun.current ? 0 : PREPARE_DELAY_MS;
+    firstRun.current = false;
+    const timer = setTimeout(() => {
+      buildBackup(source).then(
+        (result) => {
+          if (!alive) return;
+          prepared.current = result;
+          setPrimed(true);
+        },
+        (error) => {
+          console.error('Не удалось заранее подготовить копию', error);
+          if (alive) setPrimed(true);
+        },
+      );
+    }, delay);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [allBooks, progress, current]);
 
   const fail = (text: string, error?: unknown) => {
     if (error !== undefined) console.error(text, error);
@@ -38,17 +107,26 @@ export function DataSection() {
   };
 
   const makeBackup = async () => {
+    if (working.current) return;
+    working.current = true;
     setBusy('export');
     setNotice(null);
     try {
-      const data = await exportBackup(`kisr-library@${APP_VERSION}`);
-      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-      await shareOrDownload(backupFileName(new Date()), blob);
-      await updateSettings({ lastBackupAt: Date.now(), booksAtLastBackup: books.value.length });
-      setStorageTick((n) => n + 1);
+      const old = prepared.current;
+      let ready: Prepared | null = old && sameSource(old.source, currentSource()) ? old : null;
+      // Свежего готового файла нет (ещё готовится, не вышло или данные изменились): собираем сейчас.
+      // Если файл готов, `await` здесь не выполняется и «Поделиться» вызывается прямо в обработчике нажатия.
+      ready ??= await buildBackup(currentSource());
+      const given = await shareOrDownload(ready.file.name, ready.file);
+      // Закрыли меню «Поделиться» — копии нет, и напоминание о ней остаётся в силе
+      if (given) {
+        await updateSettings({ lastBackupAt: Date.now(), booksAtLastBackup: ready.bookCount });
+        setStorageTick((n) => n + 1);
+      }
     } catch (error) {
       fail('Не удалось сделать копию', error);
     } finally {
+      working.current = false;
       setBusy(null);
     }
   };
@@ -73,19 +151,21 @@ export function DataSection() {
       fail('Это не файл резервной копии Kisr Library');
       return;
     }
-    setFile(data);
+    setPicked({ file: data, stamp: backupStamp(data.exportedAt) });
     setConfirming(true);
   };
 
-  const restore = async (backup: BackupFile) => {
+  const restore = async ({ file, stamp }: Picked) => {
+    if (working.current) return;
+    working.current = true;
     setConfirming(false);
     setBusy('restore');
-    // Пока шторка уходит, под ней не видно ни тоста, ни итога
-    await wait(EXIT_MS);
     try {
+      // Пока шторка уходит, под ней не видно ни тоста, ни итога
+      await wait(EXIT_MS);
       let report: Awaited<ReturnType<typeof importBackup>>;
       try {
-        report = await importBackup(backup);
+        report = await importBackup(file);
       } catch (error) {
         // Слияние идёт одной транзакцией: при сбое в базе ничего не изменилось
         fail('Не удалось восстановить: ничего не изменилось', error);
@@ -93,7 +173,7 @@ export function DataSection() {
       }
       try {
         await reloadAfterRestore();
-        await updateSettings({ lastBackupAt: backup.exportedAt, booksAtLastBackup: books.value.length });
+        await updateSettings({ lastBackupAt: stamp, booksAtLastBackup: books.value.length });
       } catch (error) {
         fail('Копия восстановлена, но экран не обновился. Закрой приложение и открой снова', error);
         return;
@@ -103,9 +183,13 @@ export function DataSection() {
       toast(text);
       setStorageTick((n) => n + 1);
     } finally {
+      working.current = false;
       setBusy(null);
     }
   };
+
+  // Пересборка после правок идёт молча (подпись не мигает); если нажать в этот момент, копия соберётся при нажатии
+  const exportHint = busy === 'export' ? 'Сохраняю копию…' : !primed ? 'Готовлю копию…' : lastBackupLine(current.lastBackupAt);
 
   return (
     <Section title="Данные">
@@ -113,7 +197,7 @@ export function DataSection() {
         <button type="button" class="srow srow--button" disabled={busy !== null} onClick={() => void makeBackup()}>
           <span class="srow__text">
             <span class="srow__title">Сделать резервную копию</span>
-            <span class="srow__sub">{busy === 'export' ? 'Готовлю файл…' : lastBackupLine(settings.value.lastBackupAt)}</span>
+            <span class="srow__sub">{exportHint}</span>
           </span>
           <Icon class="srow__icon" name="upload" size={20} />
         </button>
@@ -138,19 +222,29 @@ export function DataSection() {
       </div>
 
       <Sheet open={confirming} title="Восстановить из копии?" onClose={() => setConfirming(false)}>
-        {file && <RestoreConfirm file={file} onConfirm={() => void restore(file)} onCancel={() => setConfirming(false)} />}
+        {picked && (
+          <RestoreConfirm picked={picked} busy={busy !== null} onConfirm={() => void restore(picked)} onCancel={() => setConfirming(false)} />
+        )}
       </Sheet>
     </Section>
   );
 }
 
-function RestoreConfirm({ file, onConfirm, onCancel }: { file: BackupFile; onConfirm: () => void; onCancel: () => void }) {
-  const bookCount = file.books.length;
-  const markCount = file.marks.length;
+interface RestoreConfirmProps {
+  picked: Picked;
+  /** Идёт восстановление (шторка ещё уходит): повторное нажатие ничего не должно запускать. */
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function RestoreConfirm({ picked, busy, onConfirm, onCancel }: RestoreConfirmProps) {
+  const bookCount = picked.file.books.length;
+  const markCount = picked.file.marks.length;
   return (
     <>
       <p class="sconfirm__what">
-        Копия от {formatDate(file.exportedAt)}: {bookCount}&nbsp;{plural(bookCount, 'книга', 'книги', 'книг')}, {markCount}&nbsp;
+        Копия от {formatDate(picked.stamp)}: {bookCount}&nbsp;{plural(bookCount, 'книга', 'книги', 'книг')}, {markCount}&nbsp;
         {plural(markCount, 'отметка', 'отметки', 'отметок')}.
       </p>
       <p class="sconfirm__rules">
@@ -158,10 +252,10 @@ function RestoreConfirm({ file, onConfirm, onCancel }: { file: BackupFile; onCon
         сливаются так же. Ничего не удалится.
       </p>
       <div class="sconfirm__actions">
-        <Button variant="primary" wide onClick={onConfirm}>
+        <Button variant="primary" wide disabled={busy} onClick={onConfirm}>
           Восстановить
         </Button>
-        <Button wide onClick={onCancel}>
+        <Button wide disabled={busy} onClick={onCancel}>
           Отмена
         </Button>
       </div>

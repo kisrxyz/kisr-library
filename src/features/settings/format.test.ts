@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../core/types';
-import { appearanceSummary, backupFileName, formatBytes, lastBackupLine, speedOptions } from './format';
+import { appearanceSummary, backupFileName, backupStamp, formatBytes, lastBackupLine, speedOptions } from './format';
 
 const NB = '\u00A0';
 
@@ -62,5 +62,24 @@ describe('speedOptions', () => {
   it('своё значение из восстановленных настроек встаёт на своё место', () => {
     expect(speedOptions(200).map((o) => o.value)).toEqual([150, 180, 200, 220, 260]);
     expect(speedOptions(120).map((o) => o.value)).toEqual([120, 150, 180, 220, 260]);
+  });
+});
+
+describe('backupStamp', () => {
+  const now = new Date(2026, 10, 20, 12).getTime();
+
+  it('время копии из файла', () => {
+    const exportedAt = new Date(2026, 10, 17, 12).getTime();
+    expect(backupStamp(exportedAt, now)).toBe(exportedAt);
+  });
+
+  it('нет времени, мусор или не число — берём «сейчас», чтобы напоминание не ломалось', () => {
+    for (const bad of [undefined, null, Number.NaN, Number.POSITIVE_INFINITY, '1700000000000', {}]) {
+      expect(backupStamp(bad, now)).toBe(now);
+    }
+  });
+
+  it('время из будущего не откладывает напоминание: берём «сейчас»', () => {
+    expect(backupStamp(now + 5 * 24 * 3600 * 1000, now)).toBe(now);
   });
 });

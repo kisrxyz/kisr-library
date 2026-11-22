@@ -34,7 +34,7 @@ afterEach(() => {
 describe('shareOrDownload', () => {
   it('открывает меню «Поделиться» с файлом нужного имени, если система его поддерживает', async () => {
     const { share } = stubShare(true, async () => {});
-    await shareOrDownload('kniga.md', blob());
+    await expect(shareOrDownload('kniga.md', blob())).resolves.toBe(true);
     expect(share).toHaveBeenCalledTimes(1);
     const [{ files }] = share.mock.calls[0] as [{ files: File[] }];
     expect(files).toHaveLength(1);
@@ -42,21 +42,21 @@ describe('shareOrDownload', () => {
     expect(clicked).toEqual([]);
   });
 
-  it('закрыл меню — не скачивает', async () => {
+  it('закрыл меню — не скачивает и сообщает, что файл не отдан (false)', async () => {
     stubShare(true, () => Promise.reject(new DOMException('отмена', 'AbortError')));
-    await shareOrDownload('kniga.md', blob());
+    await expect(shareOrDownload('kniga.md', blob())).resolves.toBe(false);
     expect(clicked).toEqual([]);
   });
 
   it('другая ошибка меню — скачивает файл', async () => {
     stubShare(true, () => Promise.reject(new DOMException('нет жеста', 'NotAllowedError')));
-    await shareOrDownload('kniga.md', blob());
+    await expect(shareOrDownload('kniga.md', blob())).resolves.toBe(true);
     expect(clicked).toEqual([{ href: expect.stringContaining('blob:test'), download: 'kniga.md' }]);
   });
 
   it('файлы не поддерживаются — скачивает и освобождает адрес', async () => {
     const { share } = stubShare(false, async () => {});
-    await shareOrDownload('kniga.md', blob());
+    await expect(shareOrDownload('kniga.md', blob())).resolves.toBe(true);
     expect(share).not.toHaveBeenCalled();
     expect(clicked).toEqual([{ href: expect.stringContaining('blob:test'), download: 'kniga.md' }]);
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
@@ -66,7 +66,13 @@ describe('shareOrDownload', () => {
   });
 
   it('в браузере без Web Share тоже скачивает', async () => {
-    await shareOrDownload('kniga.md', blob());
+    await expect(shareOrDownload('kniga.md', blob())).resolves.toBe(true);
     expect(clicked).toHaveLength(1);
+  });
+
+  it('меню открывается сразу при вызове, до первого await: жест нажатия ещё свежий (iOS)', () => {
+    const { share } = stubShare(true, async () => {});
+    void shareOrDownload('kniga.md', blob());
+    expect(share).toHaveBeenCalledTimes(1);
   });
 });

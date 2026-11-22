@@ -3,10 +3,10 @@ import { signal } from '@preact/signals';
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isBackup } from '../../core/backup';
+import { isBackup, needsBackupReminder } from '../../core/backup';
 import { newProgress } from '../../core/progress';
 import { DEFAULT_SETTINGS, type BookMeta } from '../../core/types';
-import { exportBackup } from '../../db/backup';
+import { exportBackup, importBackup } from '../../db/backup';
 import { getAllBooks, saveBook } from '../../db/books';
 import { getMarks, putMark } from '../../db/marks';
 import { getSettings } from '../../db/settings';
@@ -17,12 +17,20 @@ import { EXIT_MS } from '../../ui/Sheet';
 import { toasts } from '../../ui/toast-state';
 import { SettingsScreen } from './SettingsScreen';
 
-const share = vi.hoisted(() => ({ calls: [] as { name: string; data: Blob }[] }));
+// «Поделиться»: `result` — что вернёт меню (true — файл отдан, false — меню закрыли)
+const share = vi.hoisted(() => ({ calls: [] as { name: string; data: Blob }[], result: true }));
 vi.mock('../../ui/share', () => ({
   shareOrDownload: vi.fn(async (name: string, data: Blob) => {
     share.calls.push({ name, data });
+    return share.result;
   }),
 }));
+
+// Настоящие копия и слияние, но со счётчиком вызовов
+vi.mock('../../db/backup', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../db/backup')>();
+  return { ...actual, exportBackup: vi.fn(actual.exportBackup), importBackup: vi.fn(actual.importBackup) };
+});
 
 const pwa = vi.hoisted(() => ({ updateApp: vi.fn() }));
 vi.mock('../../pwa', () => ({ needUpdate: signal(false), updateApp: pwa.updateApp }));
@@ -36,6 +44,9 @@ beforeEach(() => {
   settings.value = { ...DEFAULT_SETTINGS };
   toasts.value = [];
   share.calls.length = 0;
+  share.result = true;
+  vi.mocked(exportBackup).mockClear();
+  vi.mocked(importBackup).mockClear();
   needUpdate.value = false;
   pwa.updateApp.mockClear();
   host = document.createElement('div');
@@ -172,9 +183,16 @@ describe('«Ещё»: место на устройстве', () => {
 });
 
 describe('«Ещё»: резервная копия', () => {
+  const exportRow = () => rowByTitle('Сделать резервную копию');
+  /** Файл копии собирается заранее: пока первый раз готовится, под названием кнопки написано «Готовлю копию…». */
+  const waitPrepared = (timeout = 1000) => vi.waitFor(() => expect(exportRow().textContent).not.toContain('Готовлю'), { timeout });
+  const settled = () => vi.waitFor(() => expect(exportRow().disabled).toBe(false));
+  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
   it('до первой копии: «Копий ещё не было»', async () => {
     await mount();
-    expect(rowByTitle('Сделать резервную копию').textContent).toContain('Копий ещё не было');
+    await waitPrepared();
+    expect(exportRow().textContent).toContain('Копий ещё не было');
   });
 
   it('копия: файл kisr-library-backup-ГГГГ-ММ-ДД.json отдаётся «Поделиться», запоминаются дата и число книг', async () => {
@@ -182,10 +200,12 @@ describe('«Ещё»: резервная копия', () => {
     await addBook('b', 'Вторая');
     await putMark({ id: 'a|k', bookId: 'a', chapter: 1, blockKey: 'k', text: 'Абзац', highlight: true, note: '', createdAt: 1, updatedAt: 1 });
     await mount();
+    await waitPrepared();
 
     const before = Date.now();
-    await act(async () => rowByTitle('Сделать резервную копию').click());
+    await act(async () => exportRow().click());
     await vi.waitFor(() => expect(settings.value.lastBackupAt).not.toBeNull());
+    await settled();
 
     expect(share.calls).toHaveLength(1);
     const { name, data } = share.calls[0];
@@ -200,9 +220,121 @@ describe('«Ещё»: резервная копия', () => {
 
     expect(settings.value.lastBackupAt).toBeGreaterThanOrEqual(before);
     expect(settings.value.booksAtLastBackup).toBe(2);
-    expect(rowByTitle('Сделать резервную копию').textContent).toMatch(/Последняя копия: \d{1,2} \S+\./);
+    expect(exportRow().textContent).toMatch(/Последняя копия: \d{1,2} \S+\./);
     // и в базе тоже
     expect((await getSettings()).booksAtLastBackup).toBe(2);
+  });
+
+  it('файл готов заранее: нажатие сразу, до первого await, отдаёт его «Поделиться» (жест на iOS ещё свежий)', async () => {
+    await addBook('a', 'Первая');
+    await mount();
+    await waitPrepared();
+    const built = vi.mocked(exportBackup).mock.calls.length;
+    expect(built).toBeGreaterThan(0);
+
+    act(() => exportRow().click());
+    // никаких ожиданий между нажатием и «Поделиться»
+    expect(share.calls).toHaveLength(1);
+    expect(share.calls[0].data).toBeInstanceOf(File);
+    expect(share.calls[0].name).toMatch(/^kisr-library-backup-/);
+    // и заново ничего не собиралось
+    expect(vi.mocked(exportBackup)).toHaveBeenCalledTimes(built);
+    await settled();
+  });
+
+  it('закрыл меню «Поделиться» — копия не считается сделанной: дата и число книг не меняются', async () => {
+    await addBook('a', 'Первая');
+    await mount();
+    await waitPrepared();
+    share.result = false;
+
+    await act(async () => exportRow().click());
+    expect(share.calls).toHaveLength(1);
+    await settled();
+    await wait(30); // успело бы записаться, будь там updateSettings
+
+    expect(settings.value.lastBackupAt).toBeNull();
+    expect(settings.value.booksAtLastBackup).toBe(0);
+    expect((await getSettings()).lastBackupAt).toBeNull();
+    expect(exportRow().textContent).toContain('Копий ещё не было');
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(toasts.value).toHaveLength(0);
+
+    // а при следующем нажатии вариант в меню уже выбрали: теперь копия записана
+    share.result = true;
+    await act(async () => exportRow().click());
+    await vi.waitFor(() => expect(settings.value.lastBackupAt).not.toBeNull());
+    expect(settings.value.booksAtLastBackup).toBe(1);
+  });
+
+  it('файл не подготовился — при нажатии собирается заново', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(exportBackup).mockRejectedValueOnce(new Error('сбой при подготовке'));
+    await addBook('a', 'Первая');
+    await mount();
+    await waitPrepared();
+    expect(share.calls).toHaveLength(0);
+
+    await act(async () => exportRow().click());
+    await vi.waitFor(() => expect(settings.value.lastBackupAt).not.toBeNull());
+    expect(share.calls).toHaveLength(1);
+    expect(vi.mocked(exportBackup)).toHaveBeenCalledTimes(2);
+    expect(settings.value.booksAtLastBackup).toBe(1);
+  });
+
+  it('книги изменились, а новый файл ещё не готов — отдаётся свежий, собранный при нажатии (старый не отдаём)', async () => {
+    await addBook('a', 'Первая');
+    await mount();
+    await waitPrepared();
+
+    await act(async () => {
+      await addBook('b', 'Вторая');
+    });
+
+    act(() => exportRow().click());
+    // старый файл не отдаём: сразу ничего не открылось, копия собирается заново
+    expect(share.calls).toHaveLength(0);
+    await vi.waitFor(() => expect(share.calls).toHaveLength(1));
+    const file: unknown = JSON.parse(await share.calls[0].data.text());
+    expect(isBackup(file) && file.books.map((b) => b.id).sort()).toEqual(['a', 'b']);
+    await vi.waitFor(() => expect(settings.value.booksAtLastBackup).toBe(2));
+  });
+
+  it('нажатие в тот же миг, когда книги изменились (до перерисовки): старый файл не отдаётся', async () => {
+    await addBook('a', 'Первая');
+    await mount();
+    await waitPrepared();
+    const second = sampleBook('Вторая', 3, { id: 'b' });
+    await saveBook(second.meta, second.chapters);
+
+    act(() => {
+      books.value = [...books.value, second.meta];
+      exportRow().click();
+    });
+    expect(share.calls).toHaveLength(0);
+    await vi.waitFor(() => expect(share.calls).toHaveLength(1));
+    const file: unknown = JSON.parse(await share.calls[0].data.text());
+    expect(isBackup(file) && file.books.map((b) => b.id).sort()).toEqual(['a', 'b']);
+    await settled();
+  });
+
+  it('после изменения книг файл готовится заново (с паузой) и снова отдаётся сразу', async () => {
+    await addBook('a', 'Первая');
+    await mount();
+    await waitPrepared();
+    await act(async () => {
+      await addBook('b', 'Вторая');
+    });
+    const before = vi.mocked(exportBackup).mock.calls.length;
+    // пересборка идёт молча, с паузой; ждём, пока она случится
+    await vi.waitFor(() => expect(vi.mocked(exportBackup).mock.calls.length).toBeGreaterThan(before), { timeout: 3000 });
+    await wait(50);
+
+    act(() => exportRow().click());
+    expect(share.calls).toHaveLength(1);
+    const file: unknown = JSON.parse(await share.calls[0].data.text());
+    expect(isBackup(file) && file.books.map((b) => b.id).sort()).toEqual(['a', 'b']);
+    await settled();
   });
 
   it('сбой при создании копии — тост, дата копии не меняется', async () => {
@@ -211,7 +343,8 @@ describe('«Ещё»: резервная копия', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await addBook('a', 'Первая');
     await mount();
-    await act(async () => rowByTitle('Сделать резервную копию').click());
+    await waitPrepared();
+    await act(async () => exportRow().click());
     await vi.waitFor(() => expect(toasts.value.at(-1)?.text).toBe('Не удалось сделать копию'));
     expect(settings.value.lastBackupAt).toBeNull();
     expect(host.querySelector('[role="alert"]')?.textContent).toBe('Не удалось сделать копию');
@@ -232,23 +365,44 @@ async function chooseFile(content: string, name = 'kisr-library-backup-2026-11-1
 
 describe('«Ещё»: восстановление из копии', () => {
   /** Копия с двумя книгами, прогрессом и отметкой, сделанная «на другом телефоне». */
-  async function makeBackupJson(): Promise<string> {
+  async function makeBackupJson(patch: (file: Record<string, unknown>) => void = () => {}): Promise<string> {
     await addBook('a', 'Первая');
     await addBook('b', 'Вторая');
     await putMark({ id: 'a|k', bookId: 'a', chapter: 2, blockKey: 'k', text: 'Абзац', highlight: true, note: 'Заметка', createdAt: 5, updatedAt: 5 });
     const file = await exportBackup('kisr-library@test');
     file.exportedAt = new Date(2026, 10, 17, 12).getTime();
+    patch(file as unknown as Record<string, unknown>);
     return JSON.stringify(file);
   }
 
-  it('подтверждение → слияние → итог «Добавлено 2, обновлено 0, пропущено 0»; помнит дату копии и число книг', async () => {
-    const json = await makeBackupJson();
-    // чистый профиль
+  /** Чистый профиль: база и сигналы пусты, экран открыт. */
+  async function mountFresh() {
     freshDb();
     __resetLibraryForTests();
     settings.value = { ...DEFAULT_SETTINGS };
     await mount();
     expect(books.value).toHaveLength(0);
+  }
+
+  const sheetButton = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('dialog.sheet button')].find((b) => b.textContent === label)!;
+
+  /** «Восстановить» в шторке, затем ждём итог (шторка уходит `EXIT_MS`). */
+  async function confirmRestore(taps = 1) {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    const confirm = sheetButton('Восстановить');
+    await act(async () => {
+      for (let i = 0; i < taps; i++) confirm.click(); // без ожидания между нажатиями: двойной тап
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXIT_MS + 50);
+    });
+    await vi.waitFor(() => expect(host.querySelector('[role="status"], [role="alert"]')).not.toBeNull());
+    vi.useRealTimers();
+  }
+
+  it('подтверждение → слияние → итог «Добавлено 2, обновлено 0, пропущено 0»; помнит дату копии и число книг', async () => {
+    const json = await makeBackupJson();
+    await mountFresh();
 
     await chooseFile(json);
     // сначала подтверждение, ничего ещё не записано
@@ -258,15 +412,7 @@ describe('«Ещё»: восстановление из копии', () => {
     expect(sheet.textContent).toContain('17 нояб.');
     expect(await getAllBooks()).toHaveLength(0);
 
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
-    await act(async () => {
-      [...sheet.querySelectorAll('button')].find((b) => b.textContent === 'Восстановить')!.click();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(EXIT_MS + 50);
-    });
-    await vi.waitFor(() => expect(host.querySelector('[role="status"]')).not.toBeNull());
-    vi.useRealTimers();
+    await confirmRestore();
 
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Добавлено 2, обновлено 0, пропущено 0');
     expect(toasts.value.at(-1)?.text).toBe('Добавлено 2, обновлено 0, пропущено 0');
@@ -308,5 +454,60 @@ describe('«Ещё»: восстановление из копии', () => {
     await chooseFile('это вообще не JSON');
     expect(document.querySelector('dialog.sheet')).toBeNull();
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('Не получилось прочитать файл');
+  });
+
+  it('двойной тап по «Восстановить»: слияние идёт один раз, итог и тост один', async () => {
+    const json = await makeBackupJson();
+    await mountFresh();
+    await chooseFile(json);
+    vi.mocked(importBackup).mockClear();
+
+    await confirmRestore(2);
+
+    expect(vi.mocked(importBackup)).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('Добавлено 2, обновлено 0, пропущено 0');
+    expect(toasts.value.filter((t) => t.text.startsWith('Добавлено'))).toHaveLength(1);
+    expect(books.value).toHaveLength(2);
+  });
+
+  it('пока идёт восстановление, кнопки шторки подтверждения заблокированы', async () => {
+    const json = await makeBackupJson();
+    await mountFresh();
+    await chooseFile(json);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    await act(async () => sheetButton('Восстановить').click());
+    // шторка ещё на экране (уходит 200 мс), но кнопки уже не работают
+    expect(sheetButton('Восстановить').disabled).toBe(true);
+    expect(sheetButton('Отмена').disabled).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(EXIT_MS + 50);
+    });
+    await vi.waitFor(() => expect(host.querySelector('[role="status"]')).not.toBeNull());
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ['нет времени копии', (f: Record<string, unknown>) => void delete f.exportedAt],
+    ['время копии — строка', (f: Record<string, unknown>) => void (f.exportedAt = 'вчера')],
+    ['время копии — null (так JSON хранит NaN)', (f: Record<string, unknown>) => void (f.exportedAt = null)],
+  ])('%s: ни «Invalid Date» в шторке, ни NaN в настройках, напоминание о копии не ломается', async (_name, patch) => {
+    const json = await makeBackupJson(patch);
+    await mountFresh();
+    const before = Date.now();
+    await chooseFile(json);
+    expect(document.querySelector('dialog.sheet')!.textContent).not.toMatch(/Invalid|NaN/);
+    expect(document.querySelector('dialog.sheet')!.textContent).toContain('Копия от ');
+
+    await confirmRestore();
+
+    const stamp = settings.value.lastBackupAt;
+    expect(stamp).not.toBeNull();
+    expect(Number.isFinite(stamp)).toBe(true);
+    expect(stamp!).toBeGreaterThanOrEqual(before);
+    expect(settings.value.booksAtLastBackup).toBe(2);
+    // сразу после восстановления напоминания нет, а через 14 дней — есть
+    expect(needsBackupReminder(settings.value, books.value.length, Date.now())).toBe(false);
+    expect(needsBackupReminder(settings.value, books.value.length, Date.now() + 15 * 24 * 3600 * 1000)).toBe(true);
+    expect((await getSettings()).lastBackupAt).toBe(stamp);
   });
 });
