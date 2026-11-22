@@ -1,6 +1,6 @@
 // Штриховые иконки 24×24, линия 1.9 со скруглёнными концами.
 // Набор из старого приложения + settings, library, clock, filter, sort, share в том же стиле.
-const ICONS = {
+export const ICONS = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/>',
   home: '<path d="M4 11.2 12 4.8l8 6.4V19a1 1 0 0 1-1 1h-4.5v-5.2h-5V20H5a1 1 0 0 1-1-1z"/>',
