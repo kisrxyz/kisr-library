@@ -2,8 +2,8 @@ import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
-import { isBackup, planMerge, type LibrarySnapshot } from '../core/backup';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { isBackup, planMerge, type BackupFile, type LibrarySnapshot } from '../core/backup';
 import { chapterStartWords, percentOf } from '../core/progress';
 import { DEFAULT_SETTINGS } from '../core/types';
 import {
@@ -11,6 +11,7 @@ import {
   findEmptyChapters,
   mergeReads,
   readOldSources,
+  type MigrationSummary,
   type OldBook,
   type OldRead,
   type OldSources,
@@ -330,10 +331,15 @@ describe('convertOld (граничные случаи)', () => {
   });
 });
 
-// Тесты на настоящих данных владельца: их нет в репозитории, поэтому без выгрузки пропускаются.
+// Тесты на настоящих данных владельца: их нет в репозитории (и в CI), поэтому без выгрузки пропускаются.
+// Тело `describe` vitest выполняет даже при skipIf, так что файлы читаются только в `beforeAll`.
 describe.skipIf(!existsSync(join(REPO, 'kisr-library', 'data', 'library.json')))('convertOld (реальная выгрузка)', () => {
-  const src = readOldSources(REPO);
-  const { backup, summary } = convertOld(src, NOW);
+  let backup: BackupFile;
+  let summary: MigrationSummary;
+
+  beforeAll(() => {
+    ({ backup, summary } = convertOld(readOldSources(REPO), NOW));
+  });
 
   it('23 книги и прогресс не меньше шести', () => {
     expect(summary.books).toBe(23);
