@@ -360,7 +360,9 @@ async function chooseFile(content: string, name = 'kisr-library-backup-2026-11-1
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
   // файл читается асинхронно: ждём либо подтверждения, либо сообщения об ошибке
-  await vi.waitFor(() => expect(document.querySelector('dialog.sheet') ?? host.querySelector('[role="alert"]')).not.toBeNull());
+  await vi.waitFor(() => expect(document.querySelector('dialog.sheet') ?? host.querySelector('[role="alert"]')).not.toBeNull(), {
+    timeout: 5000,
+  });
 }
 
 describe('«Ещё»: восстановление из копии', () => {
@@ -396,7 +398,8 @@ describe('«Ещё»: восстановление из копии', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(EXIT_MS + 50);
     });
-    await vi.waitFor(() => expect(host.querySelector('[role="status"], [role="alert"]')).not.toBeNull());
+    // Слияние и перечитывание полки под нагрузкой (все тесты сразу) бывают дольше секунды по умолчанию
+    await vi.waitFor(() => expect(host.querySelector('[role="status"], [role="alert"]')).not.toBeNull(), { timeout: 5000 });
     vi.useRealTimers();
   }
 

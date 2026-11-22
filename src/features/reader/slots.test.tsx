@@ -368,10 +368,18 @@ describe('BlockActions: отметка', () => {
     tap(barButton('Отметить'));
     tap(barButton('Отметить'));
     tap(barButton('Отметить'));
-    await until(async () => {
-      expect(await getMarks('kniga')).toHaveLength(1);
-      expect(block('pa1').classList.contains('mk')).toBe(true);
+    // Заметка встаёт в ту же очередь записей после трёх нажатий: когда она записана, записаны и они.
+    // (Иначе тест мог бы кончиться посреди очереди, и запоздавшая запись попала бы в базу следующего теста.)
+    tap(barButton('Заметка'));
+    const input = document.querySelector<HTMLTextAreaElement>('dialog.sheet textarea')!;
+    act(() => {
+      input.value = 'Точка';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
+    tap(document.querySelector('dialog.sheet button[type="submit"]')!);
+    await until(async () => expect(await getMarks('kniga')).toMatchObject([{ note: 'Точка' }]));
+    expect(await getMarks('kniga')).toMatchObject([{ blockKey: 'pa1', highlight: true, note: 'Точка' }]);
+    await until(() => expect(block('pa1').classList.contains('mk')).toBe(true));
   });
 });
 
