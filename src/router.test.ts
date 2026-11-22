@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
-import { goBack, navigate, parseHash, rememberScroll, restoreScroll, route, toHash, type Route } from './router';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { goBack, navDirection, navigate, parseHash, rememberScroll, restoreScroll, route, toHash, type Route } from './router';
 
 const library = (query = ''): Route => ({ name: 'library', params: new URLSearchParams(query) });
 
@@ -81,16 +81,19 @@ describe('toHash', () => {
 describe('навигация', () => {
   it('стартует с маршрута из адреса', () => {
     expect(route.value).toEqual(library());
+    expect(navDirection.value).toBe('initial');
   });
 
   it('navigate добавляет запись, а replace — заменяет текущую', () => {
     const start = history.length;
     navigate({ name: 'book', id: 'x' });
+    expect(navDirection.value).toBe('push');
     expect(location.hash).toBe('#/book/x');
     expect(route.value).toEqual({ name: 'book', id: 'x' });
     expect(history.length).toBe(start + 1);
 
     navigate('#/search?q=миф', { replace: true });
+    expect(navDirection.value).toBe('replace');
     expect(route.value).toEqual({ name: 'search', q: 'миф' });
     expect(history.length).toBe(start + 1);
 
@@ -102,11 +105,13 @@ describe('навигация', () => {
     goBack({ name: 'settings' });
     await settle();
     expect(route.value).toEqual(library());
+    expect(navDirection.value).toBe('pop');
   });
 
   it('goBack без своей истории открывает запасной маршрут вместо текущего', () => {
     const start = history.length;
     goBack({ name: 'notes', tab: 'actions' });
+    expect(navDirection.value).toBe('replace');
     expect(route.value).toEqual({ name: 'notes', tab: 'actions' });
     expect(location.hash).toBe('#/notes?tab=actions');
     expect(history.length).toBe(start);
@@ -116,30 +121,81 @@ describe('навигация', () => {
     location.hash = '#/book/y';
     await settle();
     expect(route.value).toEqual({ name: 'book', id: 'y' });
+    // popstate и hashchange приходят на один переход: второй не превращает «вперёд» в «назад»
+    expect(navDirection.value).toBe('push');
 
     goBack(library());
     await settle();
     expect(route.value).toEqual({ name: 'notes', tab: 'actions' });
+    expect(navDirection.value).toBe('pop');
   });
 });
 
 describe('прокрутка', () => {
-  it('запоминает позицию по ключу и восстанавливает её', () => {
+  function spies() {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const scrollY = vi.spyOn(window, 'scrollY', 'get');
+    return { scrollTo, scrollY };
+  }
 
+  afterEach(() => vi.restoreAllMocks());
+
+  it('«назад» возвращает запомненную позицию экрана', async () => {
+    const { scrollTo, scrollY } = spies();
+    navigate('#/book/scroll-a');
     scrollY.mockReturnValue(640);
-    rememberScroll('library');
+    rememberScroll('book:scroll-a');
+    navigate('#/read/scroll-a/1');
     scrollY.mockReturnValue(1200);
-    rememberScroll('search');
+    rememberScroll('read:scroll-a');
 
-    restoreScroll('library');
+    history.back();
+    await settle();
+    expect(navDirection.value).toBe('pop');
+    expect(route.value).toEqual({ name: 'book', id: 'scroll-a' });
+    restoreScroll('book:scroll-a');
     expect(scrollTo).toHaveBeenLastCalledWith(0, 640);
-    restoreScroll('search');
-    expect(scrollTo).toHaveBeenLastCalledWith(0, 1200);
-    restoreScroll('notes');
+    // экран, которого не запоминали, открывается сверху
+    restoreScroll('никогда не был');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+  });
+
+  it('новый переход (navigate, ссылка) открывает экран с начала, даже если позиция запомнена', async () => {
+    const { scrollTo, scrollY } = spies();
+    scrollY.mockReturnValue(900);
+    rememberScroll('book:scroll-a');
+
+    navigate('#/book/scroll-b');
+    expect(navDirection.value).toBe('push');
+    navigate('#/book/scroll-a');
+    restoreScroll('book:scroll-a');
     expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
 
-    vi.restoreAllMocks();
+    location.hash = '#/book/scroll-c';
+    await settle();
+    expect(navDirection.value).toBe('push');
+    restoreScroll('book:scroll-a');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+
+    navigate('#/book/scroll-d', { replace: true });
+    expect(navDirection.value).toBe('replace');
+    restoreScroll('book:scroll-a');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+  });
+
+  it('после «назад» запомненная позиция снова доступна, а следующий переход вперёд её не берёт', async () => {
+    const { scrollTo, scrollY } = spies();
+    scrollY.mockReturnValue(300);
+    rememberScroll('library');
+
+    history.back();
+    await settle();
+    expect(navDirection.value).toBe('pop');
+    restoreScroll('library');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 300);
+
+    navigate('#/settings');
+    restoreScroll('library');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
   });
 });

@@ -144,7 +144,7 @@ export function BookScreen({ route: current }: { route: RouteOf<'book'> }) {
   const confirmDelete = () => {
     setSheet(null);
     scheduleDelete(id);
-    toast('Книга удалена', { label: 'Вернуть', run: () => undoDelete(id) }, DELETE_UNDO_MS);
+    toast('Удалено', { label: 'Вернуть', run: () => undoDelete(id) }, DELETE_UNDO_MS);
     navigate(shelf(), { replace: true });
   };
 

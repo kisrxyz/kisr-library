@@ -1,4 +1,4 @@
-import { signal, type Signal } from '@preact/signals';
+import { batch, signal, type Signal } from '@preact/signals';
 
 /** Экраны приложения. Адреса — в `location.hash` (spec §10). */
 export type Route =
@@ -93,6 +93,15 @@ const hasWindow = typeof window !== 'undefined';
 /** Текущий экран. Меняется через `navigate`, `goBack`, ссылки `href="#/…"` и кнопки браузера. */
 export const route: Signal<Route> = signal(hasWindow ? parseHash(location.hash) : libraryRoute());
 
+/**
+ * Как открыт текущий экран: `initial` — первая загрузка, `push` — новая запись истории (ссылка, вкладка,
+ * `navigate`), `replace` — запись заменена, `pop` — переход к уже существующей записи (кнопка «назад» или
+ * «вперёд», жест на iOS, `goBack`). Прокрутка возвращается только при `pop`: новый экран открывается с начала.
+ */
+export type NavDirection = 'initial' | 'push' | 'replace' | 'pop';
+
+export const navDirection: Signal<NavDirection> = signal('initial');
+
 // Каждая запись истории, открытая внутри приложения, помечается своим номером.
 // Номер > 0 значит, что перед ней есть запись приложения и `history.back()` не уведёт наружу.
 const DEPTH_KEY = 'kisrDepth';
@@ -110,8 +119,13 @@ function markEntry(d: number, url?: string): void {
   history.replaceState({ ...base, [DEPTH_KEY]: d }, '', url);
 }
 
-function setRoute(next: Route): void {
-  if (toHash(next) !== toHash(route.value)) route.value = next;
+/** Меняет маршрут вместе со способом перехода (экраны читают их в одном проходе). Тот же адрес — ничего не меняет. */
+function setRoute(next: Route, how: NavDirection): void {
+  if (toHash(next) === toHash(route.value)) return;
+  batch(() => {
+    navDirection.value = how;
+    route.value = next;
+  });
 }
 
 // Ссылки, адресная строка, «назад» и «вперёд». Браузер может прислать и popstate, и hashchange
@@ -119,12 +133,13 @@ function setRoute(next: Route): void {
 function onHistoryChange(): void {
   const known = depthOf(history.state);
   if (known === null) {
+    // Запись без номера: её только что создала ссылка или правка адреса — это переход вперёд
     depth += 1;
     markEntry(depth);
   } else {
     depth = known;
   }
-  setRoute(parseHash(location.hash));
+  setRoute(parseHash(location.hash), known === null ? 'push' : 'pop');
 }
 
 if (hasWindow) {
@@ -148,7 +163,7 @@ export function navigate(to: Route | string, opts: { replace?: boolean } = {}): 
     depth += 1;
     history.pushState({ [DEPTH_KEY]: depth }, '', hash);
   }
-  setRoute(next);
+  setRoute(next, opts.replace ? 'replace' : 'push');
 }
 
 /**
@@ -170,7 +185,10 @@ export function rememberScroll(key: string): void {
   scrollPositions.set(key, window.scrollY);
 }
 
-/** Вернуть запомненную прокрутку (или в начало). Звать в `useLayoutEffect`, чтобы не было скачка. */
+/**
+ * Вернуть запомненную прокрутку — только если экран открыт кнопкой «назад» (или «вперёд»), `navDirection === 'pop'`.
+ * Иначе (ссылка, вкладка, `navigate`) экран открывается с начала. Звать в `useLayoutEffect`, чтобы не было скачка.
+ */
 export function restoreScroll(key: string): void {
-  window.scrollTo(0, scrollPositions.get(key) ?? 0);
+  window.scrollTo(0, navDirection.value === 'pop' ? (scrollPositions.get(key) ?? 0) : 0);
 }

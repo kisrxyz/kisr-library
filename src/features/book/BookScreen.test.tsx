@@ -137,7 +137,7 @@ describe('BookScreen: удаление', () => {
     expect(books.value).toHaveLength(0);
     expect(route.value.name).toBe('library');
     const t = toasts.value.at(-1)!;
-    expect(t.text).toBe('Книга удалена');
+    expect(t.text).toBe('Удалено');
     expect(t.action?.label).toBe('Вернуть');
 
     act(() => t.action!.run());

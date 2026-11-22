@@ -13,7 +13,7 @@ import {
   type StatusFilter,
 } from '../../core/library';
 import type { SortKey } from '../../core/types';
-import { navigate, rememberScroll, restoreScroll, type RouteOf } from '../../router';
+import { navDirection, navigate, rememberScroll, restoreScroll, type RouteOf } from '../../router';
 import { books, progressMap } from '../../state/library';
 import { settings, updateSettings } from '../../state/settings';
 import { Button } from '../../ui/Button';
@@ -108,10 +108,10 @@ export function LibraryScreen({ route: current }: { route: RouteOf<'library'> })
   const { wpm, sort: defaultSort } = settings.value;
   const calls = callNos.value;
 
-  // Прокрутка полки: возвращаем при открытии, запоминаем при уходе (после отрисовки списка)
+  // Прокрутка полки: возвращаем при возврате кнопкой «назад», запоминаем при уходе (после отрисовки списка)
   useLayoutEffect(() => {
     restoreScroll('library');
-    restoreAnchor();
+    if (navDirection.value === 'pop') restoreAnchor();
     return () => {
       rememberScroll('library');
       saveAnchor();
