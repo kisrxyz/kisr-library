@@ -8,6 +8,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 import { render } from 'preact';
 import { App } from './app';
+import { initPwa } from './pwa';
 import { loadLibrary } from './state/library';
 import { loadSettings } from './state/settings';
 
@@ -23,6 +24,8 @@ async function start(): Promise<void> {
     console.error('Не удалось прочитать хранилище', error);
   }
   render(<App />, document.getElementById('app')!);
+  // Service worker только в сборке: в `npm run dev` он кэшировал бы устаревший код.
+  if (import.meta.env.PROD) initPwa();
 }
 
 void start();

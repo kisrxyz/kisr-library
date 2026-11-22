@@ -14,6 +14,9 @@
     <meta name="apple-mobile-web-app-title" content="Kisr Library" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="Личная библиотека книг от Claude: читать офлайн с того места, где остановился." />
+    <!-- Пути из public/: Vite сам добавляет к ним `base` (на GitHub Pages — /kisr-library/). Манифест подключает vite-plugin-pwa. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Kisr Library</title>
     <!-- Тема до первой отрисовки: настройки приходят из IndexedDB позже, и тёмная тема успела бы мигнуть светлой.
          Значение зеркалит src/state/settings.ts (ключ kisr-theme); «авто» и сбой хранилища — тема по системе. -->
