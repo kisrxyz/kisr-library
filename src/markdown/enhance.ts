@@ -80,6 +80,10 @@ function isCheckbox(n: Element | null): n is HTMLInputElement {
 }
 
 function buildTasks(root: HTMLElement, ctx: EnhanceContext): void {
+  // В главе допустим один вид поля ввода — чекбокс пункта `- [ ]`. renderMarkdown остальные уже убрал;
+  // здесь та же защита на случай разметки, пришедшей мимо него.
+  for (const input of Array.from(root.querySelectorAll('input'))) if (input.type !== 'checkbox') input.remove();
+
   for (const li of Array.from(root.querySelectorAll('li'))) {
     // В плотном списке чекбокс лежит прямо в li, в «рыхлом» — в его первом абзаце.
     const p = Array.from(li.children).find((c) => c.tagName === 'P') ?? null;

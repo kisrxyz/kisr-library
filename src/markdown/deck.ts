@@ -72,15 +72,21 @@ export function buildDeck(cards: Card[]): HTMLElement {
 
   const card = el('button', 'flash');
   card.type = 'button';
-  const body = el('div');
 
   const prev = button({ text: 'Назад', icon: 'left' });
   const next = button({ text: 'Дальше', icon: 'right', iconAfter: true });
   const shuffleBtn = button({ label: 'Перемешать карточки', icon: 'shuffle' });
   shuffleBtn.title = 'Перемешать';
-  const modeBtn = button({ label: 'Показать все карточки списком', icon: 'list' });
+  // Подпись постоянная, состояние — в aria-pressed (иначе скринридер услышит его дважды).
+  const modeBtn = button({ label: 'Списком', icon: 'list' });
   modeBtn.title = 'Списком';
   modeBtn.setAttribute('aria-pressed', 'false');
+
+  // Карточка, кнопки и счётчик создаются один раз и больше не отсоединяются: иначе фокус
+  // уходит на <body>, а aria-live не сообщает смену. paint() меняет только их содержимое
+  // и переключает видимость «по одной» / «списком».
+  const single = el('div', 'deck-single', undefined, card, el('div', 'deck-nav', undefined, prev, out, next));
+  const list = el('div', 'deck-list');
 
   function go(step: number): void {
     idx = (idx + step + order.length) % order.length;
@@ -89,14 +95,12 @@ export function buildDeck(cards: Card[]): HTMLElement {
   }
 
   function paint(): void {
+    single.hidden = listMode;
+    list.hidden = !listMode;
     if (listMode) {
-      const list = el(
-        'div',
-        'deck-list',
-        undefined,
+      list.replaceChildren(
         ...order.map((i) => el('details', undefined, undefined, el('summary', undefined, cards[i].q), el('p', undefined, cards[i].a))),
       );
-      body.replaceChildren(list);
       return;
     }
     const c = cards[order[idx]];
@@ -107,7 +111,6 @@ export function buildDeck(cards: Card[]): HTMLElement {
       shown ? el('span', 'a', c.a || '—') : el('span', 'tap', 'Нажми, чтобы увидеть ответ'),
     );
     out.textContent = `${idx + 1} / ${order.length}`;
-    body.replaceChildren(card, el('div', 'deck-nav', undefined, prev, out, next));
   }
 
   card.addEventListener('click', () => {
@@ -131,14 +134,14 @@ export function buildDeck(cards: Card[]): HTMLElement {
   modeBtn.addEventListener('click', () => {
     listMode = !listMode;
     modeBtn.setAttribute('aria-pressed', String(listMode));
-    modeBtn.setAttribute('aria-label', listMode ? 'Показывать по одной' : 'Показать все карточки списком');
     shuffleBtn.hidden = listMode;
     paint();
   });
 
   wrap.append(
     el('div', 'deck-top', undefined, el('strong', undefined, `Карточки · ${cards.length}`), el('div', 'deck-tools', undefined, shuffleBtn, modeBtn)),
-    body,
+    single,
+    list,
   );
   paint();
   return wrap;

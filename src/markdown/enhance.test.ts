@@ -165,6 +165,29 @@ describe('чекбоксы (spec §8.7)', () => {
     expect(parent.getAttribute('data-key')).toBe('l' + hash('родитель'));
   });
 
+  it('посторонние input в пункте убираются, настоящий чекбокс работает', () => {
+    const root = document.createElement('div');
+    // Разметка не из renderMarkdown: enhanceChapter не должен полагаться на то, что её уже вычистили.
+    root.innerHTML =
+      '<ul><li><input type="checkbox" disabled> шаг <input type="password" name="p"> <input type="image" src="x"></li></ul>';
+    document.body.append(root); // change у отсоединённого чекбокса не срабатывает
+    const onTask = vi.fn();
+    enhanceChapter(root, { tasksDone: {}, onTask });
+    const inputs = Array.from(root.querySelectorAll('input'));
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0].type).toBe('checkbox');
+    inputs[0].click();
+    expect(onTask).toHaveBeenCalledWith('t' + hash('шаг'), true);
+  });
+
+  it('пункт с input другого типа вместо чекбокса не становится задачей, input убирается', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<ul><li><input type="text"> шаг</li></ul>';
+    enhanceChapter(root, { tasksDone: {}, onTask: vi.fn() });
+    expect(root.querySelector('input')).toBeNull();
+    expect(root.querySelector('li')!.classList.contains('task')).toBe(false);
+  });
+
   it('обычные пункты чекбоксов не получают', () => {
     const { root } = render('- просто');
     expect(root.querySelector('input')).toBeNull();

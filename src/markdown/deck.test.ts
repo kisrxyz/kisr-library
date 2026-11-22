@@ -25,6 +25,8 @@ afterEach(() => {
 
 const counter = () => deck.querySelector('output')!;
 const card = () => deck.querySelector<HTMLButtonElement>('button.flash')!;
+/** Виден ли элемент: ни он, ни его предки не скрыты атрибутом hidden. */
+const visible = (el: Element) => !el.closest('[hidden]');
 const btn = (label: string) =>
   Array.from(deck.querySelectorAll<HTMLButtonElement>('button')).find(
     (b) => b.textContent?.trim() === label || b.getAttribute('aria-label') === label,
@@ -92,21 +94,111 @@ describe('buildDeck', () => {
     expect(toasts.value.map((t) => t.text)).toContain('Карточки перемешаны');
   });
 
-  it('«Списком» показывает все карточки и прячет перемешивание; «По одной» возвращает', () => {
+  it('«Списком» показывает все карточки и прячет перемешивание; повторное нажатие возвращает', () => {
     mount();
-    const list = btn('Показать все карточки списком');
+    const list = btn('Списком');
     expect(list.getAttribute('aria-pressed')).toBe('false');
     list.click();
     expect(deck.querySelectorAll('.deck-list details')).toHaveLength(3);
     expect(deck.querySelector('.deck-list summary')!.textContent).toBe('Первый вопрос');
     expect(deck.querySelector('.deck-list details p')!.textContent).toBe('Первый ответ');
-    expect(deck.querySelector('button.flash')).toBeNull();
+    expect(visible(card())).toBe(false);
+    expect(visible(deck.querySelector('.deck-list')!)).toBe(true);
     expect(btn('Перемешать карточки').hidden).toBe(true);
-    const back = btn('Показывать по одной');
-    expect(back.getAttribute('aria-pressed')).toBe('true');
-    back.click();
-    expect(deck.querySelector('button.flash')).not.toBeNull();
+    // Подпись постоянная, состояние — только в aria-pressed
+    expect(list.getAttribute('aria-label')).toBe('Списком');
+    expect(list.getAttribute('aria-pressed')).toBe('true');
+    list.click();
+    expect(list.getAttribute('aria-label')).toBe('Списком');
+    expect(list.getAttribute('aria-pressed')).toBe('false');
+    expect(visible(card())).toBe(true);
+    expect(visible(deck.querySelector('.deck-list')!)).toBe(false);
     expect(btn('Перемешать карточки').hidden).toBe(false);
+  });
+
+  it('порядок после перемешивания виден и в списке', () => {
+    mount();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    btn('Перемешать карточки').click();
+    const shuffled = [...CARDS];
+    // тот же перебор, что в колоде: Fisher-Yates с random() === 0
+    const order = shuffled.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) [order[i], order[0]] = [order[0], order[i]];
+    btn('Списком').click();
+    const summaries = Array.from(deck.querySelectorAll('.deck-list summary')).map((s) => s.textContent);
+    expect(summaries).toEqual(order.map((i) => CARDS[i].q));
+  });
+
+  describe('фокус и живой счётчик', () => {
+    it('после «Дальше» и «Назад» фокус остаётся на нажатой кнопке', () => {
+      mount();
+      const next = btn('Дальше');
+      next.focus();
+      expect(document.activeElement).toBe(next);
+      next.click();
+      expect(document.activeElement).toBe(next);
+      const prev = btn('Назад');
+      prev.focus();
+      prev.click();
+      expect(document.activeElement).toBe(prev);
+    });
+
+    it('переворот карточки оставляет фокус на карточке', () => {
+      mount();
+      const c = card();
+      c.focus();
+      c.click();
+      expect(document.activeElement).toBe(c);
+      c.click();
+      expect(document.activeElement).toBe(c);
+    });
+
+    it('«Перемешать» и «Списком» оставляют фокус на своих кнопках', () => {
+      mount();
+      const shuffle = btn('Перемешать карточки');
+      shuffle.focus();
+      shuffle.click();
+      expect(document.activeElement).toBe(shuffle);
+      const list = btn('Списком');
+      list.focus();
+      list.click();
+      expect(document.activeElement).toBe(list);
+      list.click();
+      expect(document.activeElement).toBe(list);
+    });
+
+    it('карточка, кнопки и счётчик остаются на месте: ни разу не отсоединяются при действиях', () => {
+      mount();
+      const watched = [card(), btn('Назад'), btn('Дальше'), counter(), btn('Перемешать карточки'), btn('Списком')];
+      const parents = watched.map((n) => n.parentElement);
+      const observer = new MutationObserver(() => {});
+      observer.observe(deck, { childList: true, subtree: true });
+      const removed = () => observer.takeRecords().flatMap((r) => Array.from(r.removedNodes));
+
+      card().click();
+      btn('Дальше').click();
+      btn('Дальше').click();
+      btn('Назад').click();
+      btn('Перемешать карточки').click();
+      btn('Списком').click();
+      btn('Списком').click();
+      card().click();
+
+      const gone = removed();
+      for (const n of watched) expect(gone, n.className || n.tagName).not.toContain(n);
+      expect(watched.map((n) => n.parentElement)).toEqual(parents);
+      observer.disconnect();
+    });
+
+    it('счётчик — один и тот же узел с aria-live, меняется только его текст', () => {
+      mount();
+      const out = counter();
+      btn('Дальше').click();
+      expect(counter()).toBe(out);
+      expect(out.isConnected).toBe(true);
+      expect(out.textContent).toBe('2 / 3');
+      expect(out.getAttribute('aria-live')).toBe('polite');
+    });
   });
 
   it('текст карточек вставляется как текст, не как разметка', () => {
