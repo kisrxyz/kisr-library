@@ -19,3 +19,4 @@ Thumbs.db
 
 # Выгрузка старой библиотеки от владельца (личные тексты)
 kisr-library/
+.playwright-mcp/
