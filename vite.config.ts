@@ -22,9 +22,9 @@ export default defineConfig({
       injectManifest: {
         rollupFormat: 'iife',
         globPatterns: ['**/*.{js,css,html,woff2,png,svg,webmanifest}'],
-        // Греческие и вьетнамские наборы шрифтов — не для русских книг: в кэш (десятки КБ на файл) не берём.
-        // Если такой символ встретится в тексте, он отрисуется системным шрифтом.
-        globIgnores: ['**/*-greek-*.woff2', '**/*-vietnamese-*.woff2'],
+        // Греческий набор нужен: в книгах по статистике и науке встречаются α, β, μ, π, Δ, χ². Вьетнамский — нет:
+        // русским книгам он не нужен, и такие символы, если вдруг встретятся, отрисуются системным шрифтом.
+        globIgnores: ['**/*-vietnamese-*.woff2'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
       manifest: {

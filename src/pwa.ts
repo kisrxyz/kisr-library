@@ -13,13 +13,20 @@ export const needUpdate = signal(false);
 /** Включает ожидающую версию и перезагружает страницу; возвращает `registerSW`. До регистрации — обычная перезагрузка. */
 let applyUpdate: ((reload?: boolean) => Promise<void>) | undefined;
 
-/** Применить ожидающую версию. Без service worker (разработка, старый браузер) — просто перезагрузка. */
+/**
+ * Применить ожидающую версию. Без service worker (разработка, старый браузер) или если применить не вышло —
+ * просто перезагрузка: нажатие «Обновить» не должно остаться без последствий.
+ */
 export async function updateApp(): Promise<void> {
-  if (!applyUpdate) {
-    location.reload();
-    return;
+  if (applyUpdate) {
+    try {
+      await applyUpdate(true);
+      return;
+    } catch (error) {
+      console.error('Не удалось применить обновление', error);
+    }
   }
-  await applyUpdate(true);
+  location.reload();
 }
 
 /** Тост про обновление висит дольше обычного: читающий человек замечает его не сразу. */
