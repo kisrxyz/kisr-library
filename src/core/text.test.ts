@@ -4,6 +4,7 @@ import {
   formatDate,
   hash,
   makeBookId,
+  noOrphanDash,
   normalizeForSearch,
   normalizeTitle,
   pad2,
@@ -84,15 +85,38 @@ describe('plainText', () => {
     expect(out).toContain('ссылка');
     expect(out).not.toContain('https');
   });
+  it('убирает маркеры списка в начале строк, пустые строки между абзацами остаются', () => {
+    expect(plainText('Стоики:\n- Сенека\n  - Эпиктет\n* Марк Аврелий\n+ Зенон\n• Клеанф\n\nДальше.')).toBe(
+      'Стоики:\nСенека\nЭпиктет\nМарк Аврелий\nЗенон\nКлеанф\n\nДальше.',
+    );
+  });
+  it('тире прямой речи, минус перед числом и дефис внутри строки не трогает', () => {
+    expect(plainText('— Привет, — сказал он.\n-5 градусов\nсеверо-запад - ветер')).toBe('— Привет, — сказал он.\n-5 градусов\nсеверо-запад - ветер');
+  });
 });
 
 describe('normalizeForSearch / normalizeTitle', () => {
   it('нижний регистр, ё→е, без разметки, пробелы схлопнуты', () => {
     expect(normalizeForSearch('  **Твёрдый**   _ЧАЙ_ | `код` > цитата # ')).toBe('твердый чай код цитата');
   });
+  it('маркеры списка в начале строк не считаются — как в plainText', () => {
+    expect(normalizeForSearch('- Сенека\n- Эпиктет')).toBe('сенека эпиктет');
+    expect(normalizeForSearch('— Привет')).toBe('— привет');
+  });
   it('название сравнивается без пунктуации', () => {
     expect(normalizeTitle('Стоицизм: как жить ТВЁРДО!')).toBe('стоицизм как жить твердо');
     expect(normalizeTitle('Стоицизм — как жить твердо')).toBe('стоицизм как жить твердо');
+  });
+});
+
+describe('noOrphanDash', () => {
+  it('пробел перед тире — неразрывный: тире не начинает строку', () => {
+    expect(noOrphanDash('Дейл Карнеги — шпаргалка')).toBe('Дейл Карнеги — шпаргалка');
+    expect(noOrphanDash('А — б — в')).toBe('А — б — в');
+  });
+  it('без тире и с дефисом — как было', () => {
+    expect(noOrphanDash('Северо-запад')).toBe('Северо-запад');
+    expect(noOrphanDash('Стоицизм')).toBe('Стоицизм');
   });
 });
 

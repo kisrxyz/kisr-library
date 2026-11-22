@@ -1,4 +1,5 @@
 import type { Ref } from 'preact';
+import { noOrphanDash } from '../../core/text';
 import { Icon } from '../../ui/Icon';
 import { ProgressBar } from '../../ui/ProgressBar';
 
@@ -28,7 +29,7 @@ export function ReaderTopBar({ title, chapter, count, percent, hidden, onBack, o
           <Icon name="left" size={22} />
         </button>
         <div class="rbar__titles">
-          <p class="rbar__book">{title}</p>
+          <p class="rbar__book">{noOrphanDash(title)}</p>
           <p class="rbar__chapter">
             Глава {chapter} из {count}
           </p>

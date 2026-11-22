@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { plural } from '../../core/text';
+import { noOrphanDash, plural } from '../../core/text';
 import type { Mark } from '../../core/types';
 import { getMarks } from '../../db/marks';
 import { navDirection, navigate, rememberScroll, restoreScroll, toHash, type RouteOf } from '../../router';
@@ -102,7 +102,7 @@ function MarksTab({ loading, failed, groups }: { loading: boolean; failed: boole
         <section key={book.id} class="ngroup" aria-labelledby={`ngroup-${book.id}`}>
           <h2 id={`ngroup-${book.id}`} class="ngroup__head">
             <a class="ngroup__title" href={toHash({ name: 'book', id: book.id })}>
-              {book.title}
+              {noOrphanDash(book.title)}
             </a>
             <span class="ngroup__count">
               {marks.length}&nbsp;{plural(marks.length, 'отметка', 'отметки', 'отметок')}

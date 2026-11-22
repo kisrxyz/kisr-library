@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { CONTEXT, excerpt, highlightParts, type TextHit } from '../../core/search';
-import { plural } from '../../core/text';
+import { noOrphanDash, plural } from '../../core/text';
 import { minutesLabel } from '../../core/time';
 import type { BookMeta } from '../../core/types';
 import { toHash } from '../../router';
@@ -71,7 +71,7 @@ export function BookResults({ books, callNos, q, wpm }: BookResultsProps) {
                 </span>
               </span>
               <h3 class="sbook__title">
-                <Marked text={book.title} q={q} />
+                <Marked text={noOrphanDash(book.title)} q={q} />
               </h3>
               {tagsHit && (
                 <span class="sbook__tags">
@@ -148,7 +148,7 @@ export function TextResults({ hits, byId, q }: TextResultsProps) {
           <li key={`${hit.bookId}:${hit.chapter}:${i}`}>
             <a class="shit" href={toHash({ name: 'read', id: hit.bookId, chapter: hit.chapter, find })}>
               <span class="shit__where">
-                <span class="shit__book">{book.title}</span>
+                <span class="shit__book">{noOrphanDash(book.title)}</span>
                 <span class="shit__chapter">{chapterLabel(hit.chapter, hit.chapterTitle)}</span>
               </span>
               <span class="shit__snip">

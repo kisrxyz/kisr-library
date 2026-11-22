@@ -192,6 +192,13 @@ describe('ReaderScreen: книга и глава', () => {
     expect(host.querySelector('button[aria-label="Настройки чтения"]')?.textContent).toBe('Aa');
   });
 
+  it('название книги с « — » в верхней панели: тире не начинает строку', async () => {
+    const meta = await makeBook();
+    books.value = [{ ...meta, title: 'Тихая книга — конспект' }];
+    await open('#/read/kniga/2');
+    expect(host.querySelector('.rbar__book')?.textContent).toBe('Тихая книга — конспект');
+  });
+
   it('номер главы за пределами книги — последняя глава, адрес исправлен', async () => {
     await makeBook();
     await open('#/read/kniga/99');

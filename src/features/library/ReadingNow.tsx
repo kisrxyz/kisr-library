@@ -1,5 +1,6 @@
 import type { ReadingEntry } from '../../core/library';
 import { percentOf, remainingWords } from '../../core/progress';
+import { noOrphanDash } from '../../core/text';
 import { minutesLabel } from '../../core/time';
 import { toHash } from '../../router';
 import { ProgressBar } from '../../ui/ProgressBar';
@@ -33,7 +34,7 @@ export function ReadingNow({ entries, total, wpm }: ReadingNowProps) {
           return (
             <li key={book.id}>
               <a class="rrow" href={readHref(book, progress)}>
-                <span class="rrow__title">{book.title}</span>
+                <span class="rrow__title">{noOrphanDash(book.title)}</span>
                 <span class="rrow__pct">{percent}%</span>
                 <span class="rrow__meta">
                   Глава {chapter.n} · ещё {minutesLabel(remainingWords(book, progress.wordsRead), wpm)}

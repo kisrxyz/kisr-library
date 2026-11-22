@@ -76,6 +76,14 @@ describe('BookScreen: главная кнопка', () => {
   });
 });
 
+describe('BookScreen: название', () => {
+  it('с « — »: пробел перед тире неразрывный, тире не начинает строку', () => {
+    seed(undefined, { title: 'Дейл Карнеги — шпаргалка' });
+    mount();
+    expect(host.querySelector('h1')?.textContent).toBe('Дейл Карнеги — шпаргалка');
+  });
+});
+
 describe('BookScreen: страница', () => {
   it('шифр, раздел, название, описание и строка мета', () => {
     seed(undefined, { cards: 14 });

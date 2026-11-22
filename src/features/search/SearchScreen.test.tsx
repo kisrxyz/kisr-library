@@ -237,6 +237,18 @@ describe('SearchScreen: запрос из адреса и ввод', () => {
   });
 });
 
+describe('SearchScreen: название с « — »', () => {
+  it('в книгах и в местах текста тире не начинает строку, подсветка на месте', async () => {
+    await seed({ ...STOIC, title: 'Сенека — письма' });
+    mount('сенека');
+    await vi.waitFor(() => expect(heads()).toEqual(['Книги · 1', 'В тексте · 2']));
+    const title = host.querySelector('.sbook__title')!;
+    expect(title.textContent).toBe('Сенека — письма');
+    expect(title.querySelector('mark')?.textContent).toBe('Сенека');
+    expect(host.querySelector('.shit__book')?.textContent).toBe('Сенека — письма');
+  });
+});
+
 describe('SearchScreen: результаты', () => {
   it('книга: шифр, раздел, название и найденное подсвечены, ссылка на страницу книги', async () => {
     await seed(STOIC, OTHER);

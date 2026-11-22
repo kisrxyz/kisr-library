@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import { callNumbers } from '../../core/book';
 import { categoryCounts } from '../../core/library';
 import { bookStatus, percentOf } from '../../core/progress';
-import { formatDate, plural } from '../../core/text';
+import { formatDate, noOrphanDash, plural } from '../../core/text';
 import { minutesLabel } from '../../core/time';
 import type { BookMeta } from '../../core/types';
 import { navigate, rememberScroll, restoreScroll, toHash, type Route, type RouteOf } from '../../router';
@@ -188,7 +188,7 @@ export function BookScreen({ route: current }: { route: RouteOf<'book'> }) {
             <span class="bhead__callno">{callNo}</span>
             <span class="bhead__cat">{book.category}</span>
           </div>
-          <h1 class="bhead__title">{book.title}</h1>
+          <h1 class="bhead__title">{noOrphanDash(book.title)}</h1>
           {book.summary && <p class="bhead__sum">{book.summary}</p>}
           <p class="bhead__meta">
             {meta.map((item, i) => (

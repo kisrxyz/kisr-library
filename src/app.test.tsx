@@ -4,9 +4,10 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
+import { newProgress } from './core/progress';
 import { DEFAULT_SETTINGS } from './core/types';
 import { brokenDb, freshDb, sampleBook } from './db/testing';
-import { __resetLibraryForTests, saveImportedBook, startLibrary } from './state/library';
+import { __resetLibraryForTests, saveImportedBook, saveProgress, startLibrary } from './state/library';
 import { settings } from './state/settings';
 
 // Service worker в тестах не нужен (и `virtual:pwa-register` есть только в сборке)
@@ -67,5 +68,16 @@ describe('App: запуск и хранилище', () => {
     expect(host.textContent).toContain('Тихая работа');
     expect(host.textContent).not.toContain('Полка пока пустая');
     expect(host.textContent).not.toContain('Не удалось открыть хранилище');
+  });
+
+  it('название с « — » на карточке полки и в «Продолжить»: тире не начинает строку', async () => {
+    const b = sampleBook('Дейл Карнеги — шпаргалка', 2, { id: 'karnegi' });
+    await saveImportedBook(b.meta, b.chapters);
+    await saveProgress({ ...newProgress('karnegi', 1), chapter: 1 });
+    __resetLibraryForTests();
+    await startLibrary();
+    mount();
+    expect(host.querySelector('.bcard__title')?.textContent).toBe('Дейл Карнеги — шпаргалка');
+    expect(host.querySelector('.continue__title')?.textContent).toBe('Дейл Карнеги — шпаргалка');
   });
 });

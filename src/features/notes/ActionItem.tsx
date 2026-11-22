@@ -1,4 +1,4 @@
-import { formatDate } from '../../core/text';
+import { formatDate, noOrphanDash } from '../../core/text';
 import type { BookMeta } from '../../core/types';
 import { toHash } from '../../router';
 import { setBookAction } from '../../state/library';
@@ -26,7 +26,7 @@ export function ActionItem({ book }: ActionItemProps) {
   return (
     <article class={action.done ? 'action action--done' : 'action'}>
       <a class="action__book" href={toHash({ name: 'book', id: book.id })}>
-        {book.title}
+        {noOrphanDash(book.title)}
       </a>
       <p class="action__text">{action.text}</p>
       <label class="action__check">

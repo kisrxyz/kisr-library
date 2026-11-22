@@ -87,6 +87,16 @@ describe('NotesScreen: отметки', () => {
     expect(host.querySelector('.ngroup__count')?.textContent).toBe('1 отметка');
   });
 
+  it('название с « — » в заголовке группы и у действия: тире не начинает строку', async () => {
+    await addBook('a', 'Дейл Карнеги — шпаргалка', { action: { text: 'Сделать', done: false } });
+    await putMark(mark('a', 'k1', 1));
+    await mount();
+    expect(host.querySelector('.ngroup__title')?.textContent).toBe('Дейл Карнеги — шпаргалка');
+    act(() => render(null, host));
+    await mount('actions');
+    expect(host.querySelector('.action__book')?.textContent).toBe('Дейл Карнеги — шпаргалка');
+  });
+
   it('счётчики на вкладках и заголовок группы ведёт на книгу', async () => {
     await addBook('a', 'Тихая работа', { action: { text: 'Сделать', done: false } });
     await putMark(mark('a', 'k1', 1));

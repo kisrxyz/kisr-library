@@ -124,6 +124,13 @@ describe('searchText', () => {
     expect(searchText([chapter('Это [ссылка](http://x.y) тоже.')], 'ссылка тоже')[0].match).toBe('ссылка тоже');
   });
 
+  it('маркеры списка не попадают в сниппет: «Сенека», а не «- Сенека»', () => {
+    const [hit] = searchText([chapter('Стоики:\n- Сенека\n- Эпиктет\n- Марк Аврелий')], 'эпиктет');
+    expect(hit.before).toBe('Стоики: Сенека ');
+    expect(hit.match).toBe('Эпиктет');
+    expect(hit.after).toBe(' Марк Аврелий');
+  });
+
   it('перевод строки между словами считается пробелом, в сниппете это пробел', () => {
     const [hit] = searchText([chapter('Первая строка\nвторая строка')], 'строка вторая');
     expect(hit.match).toBe('строка вторая');

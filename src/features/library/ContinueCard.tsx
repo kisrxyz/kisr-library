@@ -1,5 +1,6 @@
 import type { ReadingEntry } from '../../core/library';
 import { percentOf } from '../../core/progress';
+import { noOrphanDash } from '../../core/text';
 import { Icon } from '../../ui/Icon';
 import { ProgressBar } from '../../ui/ProgressBar';
 import { chapterLine, currentChapter, progressLine, readHref } from './shared';
@@ -29,7 +30,7 @@ export function ContinueCard({ entry: { book, progress }, callNo, wpm }: Continu
       <span class="continue__shelf">
         {callNo} · {book.category}
       </span>
-      <span class="continue__title">{book.title}</span>
+      <span class="continue__title">{noOrphanDash(book.title)}</span>
       <span class="continue__where">{chapterLine(book, progress)}</span>
       {progress.snippet && <span class="continue__quote">«{progress.snippet}»</span>}
       <ProgressBar class="continue__bar" value={percent} label="Прочитано в книге" />

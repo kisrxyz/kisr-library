@@ -1,7 +1,7 @@
 import { percentOf } from '../../core/progress';
 import { minutesLabel } from '../../core/time';
 import type { BookMeta, Progress } from '../../core/types';
-import { formatDate, plural } from '../../core/text';
+import { formatDate, noOrphanDash, plural } from '../../core/text';
 import { toHash } from '../../router';
 import { Icon } from '../../ui/Icon';
 import { ProgressBar } from '../../ui/ProgressBar';
@@ -36,7 +36,7 @@ export function BookCard({ book, progress, callNo, wpm, fresh }: BookCardProps) 
           </span>
         )}
       </span>
-      <h3 class="bcard__title">{book.title}</h3>
+      <h3 class="bcard__title">{noOrphanDash(book.title)}</h3>
       {book.summary && <p class="bcard__sum">{book.summary}</p>}
       <span class="bcard__meta">
         <span>
