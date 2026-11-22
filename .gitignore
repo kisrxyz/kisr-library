@@ -1,0 +1,18 @@
+# Личные книги и данные пользователя — никогда не коммитить (репозиторий может быть публичным)
+migration/
+*.kisr-backup.json
+kisr-library-backup-*.json
+
+node_modules/
+dist/
+dev-dist/
+coverage/
+playwright-report/
+test-results/
+.vite/
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+.claude/settings.local.json
