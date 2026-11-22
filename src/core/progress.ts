@@ -75,6 +75,18 @@ export function clampProgress(p: Progress, meta: BookMeta): Progress {
 }
 
 /**
+ * Книга выросла (к ней «Дописали» главы), а была прочитана: она снова «Читаю». Позиция, `wordsRead` и
+ * отметки глав остаются; процент считается от нового объёма, `finishedAt` убирается. Иначе — тот же объект.
+ * `chaptersBefore` — сколько глав было до дописывания.
+ */
+export function reopenIfGrown(p: Progress, meta: BookMeta, chaptersBefore: number): Progress {
+  if (p.status !== 'finished' || meta.chapters.length <= chaptersBefore) return p;
+  const { finishedAt: _finishedAt, ...rest } = p;
+  void _finishedAt;
+  return { ...rest, status: 'reading', percent: percentOf(meta, p.wordsRead) };
+}
+
+/**
  * Глава дочитана (виден её конец). Книга считается прочитанной, когда дочитана
  * последняя не служебная глава; `finishedNow` — это произошло только что.
  */

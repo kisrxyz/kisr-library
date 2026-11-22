@@ -92,10 +92,64 @@ describe('readInput: что вставили', () => {
     expect(() => readInput(broken, 'paste')).toThrow(/копи/i);
   });
 
+  describe('копия, которую не удалось разобрать', () => {
+    const whole = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: 1,
+      app: 'test',
+      books: [{ id: 'a', title: 'Книга', chapters: [{ title: 'Г', md: 'текст главы' }] }],
+      progress: [],
+      marks: [],
+      tasks: [],
+      settings: {},
+    });
+    const truncated = whole.slice(0, Math.floor(whole.length * 0.6));
+
+    it('оборванный файл копии (.json) — ошибка, а не «книга» с названием по имени файла', () => {
+      expect(() => readInput(truncated, 'file', 'kisr-library-backup-2026-11-22.json')).toThrow(
+        'Файл копии повреждён или сделан более новой версией приложения',
+      );
+    });
+
+    it('оборванная вставка копии (в тексте есть kisr-library-backup) — ошибка', () => {
+      expect(() => readInput(truncated, 'paste')).toThrow(/повреждён/);
+    });
+
+    it('запятая в конце и прочие поломки того же файла — тоже ошибка', () => {
+      expect(() => readInput(whole.replace('"settings":{}', '"settings":{},'), 'file', 'копия.json')).toThrow(/повреждён/);
+    });
+
+    it('любой .json, который не разбирается, — ошибка; пустой файл — просто нет книг', () => {
+      expect(() => readInput('{"a": 1,', 'file', 'data.json')).toThrow(/повреждён/);
+      expect(() => readInput('[1, 2', 'file', 'data.json')).toThrow(/повреждён/);
+      expect(readInput('  \n', 'file', 'data.json')).toEqual({ kind: 'books', drafts: [] });
+    });
+
+    it('чужой JSON-подобный текст без имени .json и без слова «kisr-library-backup» — по-прежнему текст', () => {
+      const [d] = drafts('{"a": 1,', 'paste');
+      expect(d.parsed.chapters[0].title).toBe('Текст');
+      expect(drafts('{не json}', 'file', 'заметка.txt')).toHaveLength(1);
+    });
+
+    it('целая копия по-прежнему читается', () => {
+      expect(readInput(whole, 'file', 'kisr-library-backup-2026-11-22.json').kind).toBe('backup');
+    });
+  });
+
   it('чужой JSON и JSON-подобный текст — обычный текст книги', () => {
     const list = drafts('{"a": 1}', 'file', 'data.json');
     expect(list).toHaveLength(1);
     expect(list[0].parsed.chapters[0].title).toBe('Текст');
+  });
+
+  it('болтовня между книгами в заборах не попадает в книги и не меняет хеш', () => {
+    const src = '- [Автор, 2020. Название](https://example.com)';
+    const wrapped = (t: string) => `\`\`\`markdown\n---\ntitle: ${t}\n---\n## Глава\nтекст ${t}\n\n## Источники\n${src}\n\`\`\``;
+    const chatty = drafts(`Вот первая, как просил:\n\n${wrapped('А')}\n\nА вот вторая, как просил:\n\n${wrapped('Б')}\n\nХочешь третью?`);
+    const clean = drafts(`${wrapped('А')}\n\n${wrapped('Б')}`);
+    expect(chatty.map((d) => d.parsed.chapters.at(-1)!.md)).toEqual([src, src]);
+    expect(chatty.map((d) => d.hash)).toEqual(clean.map((d) => d.hash));
   });
 
   it('пустая вставка → нет черновиков', () => {
@@ -258,6 +312,66 @@ describe('commitDraft', () => {
     const p = (await getAllProgress()).find((x) => x.bookId === 'tihaya')!;
     expect(p.chapter).toBe(2);
     expect(p.blockKey).toBe('abc');
+  });
+
+  describe('«Дописать» в прочитанную книгу', () => {
+    async function finishedBook() {
+      const old = sampleBook('Тихая работа', 2, { id: 'tihaya' });
+      await saveImportedBook(old.meta, old.chapters);
+      await saveProgress({
+        ...newProgress('tihaya', 1),
+        chapter: 2,
+        maxChapter: 2,
+        chaptersDone: [1, 2],
+        wordsRead: old.meta.words,
+        percent: 100,
+        status: 'finished',
+        finishedAt: 1_750_000_000_000,
+        blockKey: 'abc',
+      });
+      return old;
+    }
+
+    it('книга снова «Читаю»: процент от нового объёма, позиция и отметки остались, finishedAt убран', async () => {
+      const old = await finishedBook();
+      const [d] = drafts(bookText('Тихая работа', 2, 'part: 2/2\n'));
+      expect(d.resolution).toBe('append');
+      await commitDraft(d, 1_800_000_000_000);
+
+      const saved = await getBook('tihaya');
+      const p = (await getAllProgress()).find((x) => x.bookId === 'tihaya')!;
+      expect(saved?.chapters).toHaveLength(4);
+      expect(p.status).toBe('reading');
+      expect('finishedAt' in p).toBe(false);
+      expect(p.wordsRead).toBe(old.meta.words);
+      expect(p.percent).toBe(Math.round((old.meta.words / saved!.words) * 100));
+      expect(p.percent).toBeLessThan(100);
+      expect(p.chapter).toBe(2);
+      expect(p.chaptersDone).toEqual([1, 2]);
+      expect(p.blockKey).toBe('abc');
+      expect(progressMap.value.get('tihaya')).toEqual(p);
+    });
+
+    it('«Обновить» прочитанной книги статус не трогает', async () => {
+      await finishedBook();
+      const [d] = drafts(bookText('Тихая работа', 3));
+      expect(d.resolution).toBe('update');
+      await commitDraft(d, 1_800_000_000_000);
+      const p = (await getAllProgress()).find((x) => x.bookId === 'tihaya')!;
+      expect(p.status).toBe('finished');
+      expect(p.percent).toBe(100);
+    });
+
+    it('начатая книга остаётся «Читаю», как была', async () => {
+      const old = sampleBook('Тихая работа', 2, { id: 'tihaya' });
+      await saveImportedBook(old.meta, old.chapters);
+      await saveProgress({ ...newProgress('tihaya', 1), chapter: 1, wordsRead: 5, percent: 25 });
+      const [d] = drafts(bookText('Тихая работа', 2, 'part: 2/2\n'));
+      await commitDraft(d, 1_800_000_000_000);
+      const p = (await getAllProgress()).find((x) => x.bookId === 'tihaya')!;
+      expect(p.status).toBe('reading');
+      expect(p.wordsRead).toBe(5);
+    });
   });
 
   it('«Пропустить» ничего не пишет', async () => {

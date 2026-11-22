@@ -8,6 +8,7 @@ import {
   newProgress,
   percentOf,
   remainingWords,
+  reopenIfGrown,
 } from './progress';
 import type { BookMeta, Progress } from './types';
 
@@ -258,5 +259,50 @@ describe('clampProgress', () => {
     const p: Progress = { ...newProgress('kniga', NOW), chapter: 9 };
     clampProgress(p, meta);
     expect(p.chapter).toBe(9);
+  });
+});
+
+describe('reopenIfGrown', () => {
+  const grown = makeMeta(['Первая', 'Вторая', 'Третья', 'Источники', 'Четвёртая', 'Пятая']);
+  const finished: Progress = {
+    ...newProgress('kniga', NOW),
+    chapter: 3,
+    maxChapter: 4,
+    chaptersDone: [1, 2, 3],
+    wordsRead: 300,
+    percent: 100,
+    status: 'finished',
+    finishedAt: NOW,
+    blockKey: 'pabc',
+    snippet: 'абзац',
+  };
+
+  it('прочитанная книга, в которую дописали главы, снова «Читаю»: позиция и отметки целы, процент от нового объёма', () => {
+    const p = reopenIfGrown(finished, grown, 4);
+    expect(p.status).toBe('reading');
+    expect(p.finishedAt).toBeUndefined();
+    expect('finishedAt' in p).toBe(false);
+    expect(p.percent).toBe(50); // 300 из 600 слов
+    expect(p.wordsRead).toBe(300);
+    expect(p.chapter).toBe(3);
+    expect(p.chaptersDone).toEqual([1, 2, 3]);
+    expect(p.blockKey).toBe('pabc');
+    expect(p.snippet).toBe('абзац');
+  });
+
+  it('книга не выросла — прогресс тот же объект', () => {
+    expect(reopenIfGrown(finished, makeMeta(), 4)).toBe(finished);
+    expect(reopenIfGrown(finished, makeMeta(['А', 'Б']), 4)).toBe(finished);
+  });
+
+  it('книга не была прочитана — прогресс тот же объект', () => {
+    const reading: Progress = { ...newProgress('kniga', NOW), wordsRead: 100, percent: 17 };
+    expect(reopenIfGrown(reading, grown, 4)).toBe(reading);
+  });
+
+  it('не меняет переданный объект', () => {
+    reopenIfGrown(finished, grown, 4);
+    expect(finished.status).toBe('finished');
+    expect(finished.finishedAt).toBe(NOW);
   });
 });

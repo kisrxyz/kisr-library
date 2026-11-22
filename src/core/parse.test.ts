@@ -102,13 +102,12 @@ describe('parseBook: мусор вокруг шапки', () => {
     expect(b.chapters.at(-1)!.title).toBe('Глава');
     expect(b.chapters.at(-1)!.md).toContain('текст текст');
   });
-  it('хвост «Хочешь, сделаю продолжение?» остаётся внутри последней главы', () => {
+  it('книга в обёртке кончается на закрывашке: «Хочешь, сделаю продолжение?» после неё отбрасывается', () => {
     const raw =
       'Вот разбор:\n\n```markdown\n---\ntitle: Тест\n---\n## Глава\nтекст текст\n```\nХочешь, сделаю продолжение?';
     const b = parseBook(raw);
     expect(b.chapters.map((c) => c.title)).toEqual(['Глава']);
-    expect(b.chapters[0].md).toContain('Хочешь, сделаю продолжение?');
-    expect(b.chapters[0].md).not.toContain('```');
+    expect(b.chapters[0].md).toBe('текст текст');
   });
   it('хвост без обёртки тоже не становится главой', () => {
     const raw = `---\ntitle: Т\n---\n## Глава\n${words(50)}\n\nХочешь, сделаю продолжение?`;
@@ -149,7 +148,8 @@ describe('parseBook: обёртки разной формы', () => {
     const md = b.chapters[0].md;
     expect(innerFences(md)).toEqual(['```cards', '```']);
     expect(md).toContain('Q: а\nA: б');
-    expect(md.endsWith('Хочешь, сделаю продолжение?')).toBe(true);
+    expect(md).not.toContain('Хочешь');
+    expect(md.endsWith('```')).toBe(true); // последний забор — закрывашка блока ```cards, а не хвост
     expect(md).not.toContain('````');
   });
   it('пустая строка между открывашкой и шапкой', () => {
@@ -157,7 +157,7 @@ describe('parseBook: обёртки разной формы', () => {
     const b = parseBook(raw);
     expect(b.title).toBe('Т');
     expect(innerFences(b.chapters[0].md)).toEqual([]);
-    expect(b.chapters[0].md.endsWith('Хочешь?')).toBe(true);
+    expect(b.chapters[0].md).toBe('текст');
   });
   it('обёртка ~~~markdown', () => {
     const raw = `Держи:\n~~~markdown\n---\ntitle: Т\n---\n## Глава\nтекст\n${cards}\n~~~\n`;
@@ -171,10 +171,10 @@ describe('parseBook: обёртки разной формы', () => {
     expect(b.chapters.map((c) => c.title)).toEqual(['Глава']);
     expect(innerFences(b.chapters[0].md)).toEqual(['```cards', '```']);
   });
-  it('вся книга в обёртке, закрывашка с хвостом и пустой строкой', () => {
+  it('вся книга в обёртке, после закрывашки пустая строка и вопрос — вопрос отбрасывается', () => {
     const b = parseBook('```markdown\n\n---\ntitle: Т\n---\n## Глава\nтекст\n```\n\nХочешь?\n');
     expect(b.title).toBe('Т');
-    expect(b.chapters[0].md).toBe('текст\n\n\nХочешь?');
+    expect(b.chapters[0].md).toBe('текст');
   });
   it('незакрытая обёртка: открывашка снимается, блок ```cards цел', () => {
     const b = parseBook(`Держи:\n\`\`\`markdown\n---\ntitle: Т\n---\n## Глава\n${cards}`);
@@ -354,7 +354,8 @@ describe('splitBooks', () => {
         `\`\`\`\`markdown\n---\ntitle: Б\n---\n## Г\nтекст б\n${cards}\n\`\`\`\`\nХочешь третью?`;
       const parts = splitBooks(raw);
       check(parts, ['А', 'Б']);
-      expect(parseBook(parts[1]).chapters[0].md.endsWith('Хочешь третью?')).toBe(true);
+      expect(parseBook(parts[1]).chapters[0].md).not.toContain('Хочешь третью?');
+      expect(parseBook(parts[1]).chapters[0].md.endsWith(cards)).toBe(true);
     });
     it('первая в заборе, вторая без забора, у второй блок ```cards', () => {
       const raw = `\`\`\`markdown\n---\ntitle: А\n---\n## Г\nтекст а\n\`\`\`\n\n---\ntitle: Б\n---\n## Г\nтекст б\n${cards}\n`;
@@ -371,6 +372,51 @@ describe('splitBooks', () => {
     it('одна обёртка вокруг двух книг (четыре `)', () => {
       const raw = `\`\`\`\`markdown\n---\ntitle: А\n---\n## Г\nтекст а\n${cards}\n\n---\ntitle: Б\n---\n## Г\nтекст б\n${cards}\n\`\`\`\`\n`;
       check(splitBooks(raw), ['А', 'Б']);
+    });
+  });
+
+  describe('болтовня вокруг книг в заборах не попадает в книги', () => {
+    const src = '- [Автор, 2020. Название](https://example.com)';
+    const bookIn = (fence: string, title: string) =>
+      `${fence}markdown\n---\ntitle: ${title}\n---\n## Глава\nтекст ${title}\n\n## Источники\n${src}\n${fence}`;
+    const lastMd = (chunk: string) => parseBook(chunk).chapters.at(-1)!.md;
+
+    it('две книги в заборах: ни вступление, ни «А вот вторая», ни «Хочешь третью?» не липнут к главам', () => {
+      const raw = `Вот первая, как просил:\n\n${bookIn('```', 'А')}\n\nА вот вторая, как просил:\n\n${bookIn('```', 'Б')}\n\nХочешь третью?`;
+      const parts = splitBooks(raw);
+      expect(parts).toHaveLength(2);
+      expect(parts.map((p) => parseBook(p).title)).toEqual(['А', 'Б']);
+      expect(parts.map(lastMd)).toEqual([src, src]);
+      for (const p of parts) expect(p).not.toMatch(/Хочешь|А вот вторая|Вот первая/);
+    });
+    it('то же с четырьмя ` и без пустых строк между книгами', () => {
+      const raw = `${bookIn('````', 'А')}\nА вот вторая:\n${bookIn('````', 'Б')}\nХочешь третью?`;
+      expect(splitBooks(raw).map(lastMd)).toEqual([src, src]);
+    });
+    it('одна книга в заборе и вопрос после неё → вопрос отброшен', () => {
+      const parts = splitBooks(`Держи:\n\n${bookIn('```', 'А')}\n\nХочешь, сделаю продолжение?\nИли что-то ещё?`);
+      expect(parts).toHaveLength(1);
+      expect(lastMd(parts[0])).toBe(src);
+    });
+    it('первая в заборе, вторая без забора: болтовня между ними отброшена, вторая цела до конца', () => {
+      const raw = `${bookIn('```', 'А')}\n\nА вот вторая:\n\n---\ntitle: Б\n---\n## Глава\nтекст Б\n\n## Источники\n${src}\n`;
+      expect(splitBooks(raw).map(lastMd)).toEqual([src, src]);
+    });
+    it('книга без забора: хвост остаётся в последней главе, как раньше', () => {
+      const raw = '---\ntitle: Т\n---\n## Глава\nтекст\n\nХочешь, сделаю продолжение?';
+      expect(lastMd(splitBooks(raw)[0])).toBe('текст\n\nХочешь, сделаю продолжение?');
+      expect(lastMd(raw)).toBe('текст\n\nХочешь, сделаю продолжение?');
+    });
+    it('первая без забора, вторая в заборе: хвост первой остаётся, хвост после второй отброшен', () => {
+      const raw = `---\ntitle: А\n---\n## Глава\nтекст А\n\nА вот вторая:\n\n${bookIn('```', 'Б')}\n\nХочешь третью?`;
+      const parts = splitBooks(raw);
+      expect(parts).toHaveLength(2);
+      expect(lastMd(parts[0])).toBe('текст А\n\nА вот вторая:');
+      expect(lastMd(parts[1])).toBe(src);
+    });
+    it('незакрытая обёртка ничего не отбрасывает', () => {
+      const raw = '```markdown\n---\ntitle: А\n---\n## Глава\nтекст\n\nХочешь?';
+      expect(lastMd(splitBooks(raw)[0])).toBe('текст\n\nХочешь?');
     });
   });
 

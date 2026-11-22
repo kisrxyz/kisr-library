@@ -322,6 +322,58 @@ describe('копия библиотеки', () => {
     await vi.waitFor(() => expect(host.querySelector('.addbox__note--problem')).not.toBeNull(), { timeout: 2000 });
     expect(host.querySelector('.pv, .restore')).toBeNull();
   });
+
+  it('оборванная вставка копии: ошибка в поле, «книги» из обрывка JSON нет', async () => {
+    const whole = JSON.stringify(backup(['Первая', 'Вторая']));
+    mount();
+    await act(async () => {
+      area().value = whole.slice(0, Math.floor(whole.length / 2));
+      area().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await vi.waitFor(() => expect(host.querySelector('.addbox__note--problem')).not.toBeNull(), { timeout: 2000 });
+    expect(host.querySelector('.addbox__note--problem')?.textContent).toContain('Файл копии повреждён');
+    expect(host.querySelector('.pv, .restore')).toBeNull();
+    expect(has('Сохранить на полку')).toBe(false);
+  });
+
+  /** Выбор файлов: jsdom не умеет выбирать файлы, поэтому подкладываем «файлы» с `name` и `text()`. */
+  async function pick(...picked: { name: string; text: string }[]) {
+    const input = host.querySelector<HTMLInputElement>('input[type=file]')!;
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: picked.map((f) => ({ name: f.name, text: async () => f.text })),
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  it('выбранный файл копии: подтверждение, как при вставке', async () => {
+    mount();
+    await pick({ name: 'kisr-library-backup-2026-11-22.json', text: JSON.stringify(backup(['Первая'])) });
+    await vi.waitFor(() => expect(host.querySelector('.restore__title')?.textContent).toBe('Восстановить копию: книг 1'));
+  });
+
+  it('выбранный оборванный файл копии: тост с причиной, а не «Не удалось прочитать: имя»; книги нет', async () => {
+    const whole = JSON.stringify(backup(['Первая', 'Вторая']));
+    mount();
+    await pick({ name: 'kisr-library-backup-2026-11-22.json', text: whole.slice(0, 200) });
+    await vi.waitFor(() => expect(toastTexts()).toContain('Файл копии повреждён или сделан более новой версией приложения'));
+    expect(toastTexts().some((t) => t.startsWith('Не удалось прочитать'))).toBe(false);
+    expect(toastTexts().some((t) => t.startsWith('В выбранных файлах нет текста'))).toBe(false);
+    expect(host.querySelector('.pv, .restore')).toBeNull();
+  });
+
+  it('несколько файлов: у оборванного в тосте его имя, остальные читаются', async () => {
+    mount();
+    await pick(
+      { name: 'книга.md', text: book('Тихая работа') },
+      { name: 'копия.json', text: '{"format": "kisr-library-backup", "versi' },
+    );
+    await vi.waitFor(() => expect(host.querySelector('.pv')).not.toBeNull());
+    expect(toastTexts()).toContain('копия.json: Файл копии повреждён или сделан более новой версией приложения');
+    expect(host.querySelectorAll('.pv')).toHaveLength(1);
+  });
 });
 
 describe('«Поделиться» (?shared=1)', () => {

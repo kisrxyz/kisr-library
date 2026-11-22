@@ -10,7 +10,7 @@ import { Icon } from '../../ui/Icon';
 import { toast } from '../../ui/Toast';
 import { TopBar } from '../../ui/TopBar';
 import { HowItWorks } from './HowItWorks';
-import { canSaveDraft, commitDraft, readInput, restoreBackup, savedMessage, type CommitAction, type Draft } from './importFlow';
+import { BROKEN_BACKUP, canSaveDraft, commitDraft, readInput, restoreBackup, savedMessage, type CommitAction, type Draft } from './importFlow';
 import { ImportPreview } from './ImportPreview';
 import { PromptBuilder } from './PromptBuilder';
 import './AddScreen.css';
@@ -153,18 +153,29 @@ export function AddScreen({ route }: { route: RouteOf<'add'> }) {
   const pickFiles = async (input: HTMLInputElement) => {
     const picked = [...(input.files ?? [])];
     input.value = ''; // тот же файл можно выбрать ещё раз
-    const failed: string[] = [];
+    const unread: string[] = [];
     let found = false;
+    let complained = false;
     for (const file of picked) {
+      let body: string;
       try {
-        if (take(await file.text(), 'file', file.name)) found = true;
+        body = await file.text();
       } catch (e) {
         console.error('Не удалось прочитать файл', file.name, e);
-        failed.push(file.name);
+        unread.push(file.name);
+        continue;
+      }
+      try {
+        if (take(body, 'file', file.name)) found = true;
+      } catch (e) {
+        // Копия, которую нельзя разобрать (оборвана, сломана): говорим, что именно, а не просто «не прочиталось»
+        const why = e instanceof Error ? e.message : BROKEN_BACKUP;
+        toast(picked.length > 1 ? `${file.name}: ${why}` : why);
+        complained = true;
       }
     }
-    if (failed.length > 0) toast(`Не удалось прочитать: ${failed.join(', ')}`);
-    else if (picked.length > 0 && !found) toast('В выбранных файлах нет текста книги');
+    if (unread.length > 0) toast(`Не удалось прочитать: ${unread.join(', ')}`);
+    else if (picked.length > 0 && !found && !complained) toast('В выбранных файлах нет текста книги');
   };
 
   const patchDraft = (key: string, patch: Partial<Draft>) =>

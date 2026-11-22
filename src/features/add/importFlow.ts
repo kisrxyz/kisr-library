@@ -6,10 +6,12 @@ import { BACKUP_FORMAT, isBackup, type BackupFile } from '../../core/backup';
 import { buildBook, contentHashOf } from '../../core/book';
 import { applyResolution, defaultResolution, findDuplicate, type Duplicate, type Resolution } from '../../core/duplicates';
 import { parseBook, splitBooks, type ParsedBook } from '../../core/parse';
+import { reopenIfGrown } from '../../core/progress';
 import { countWords, makeBookId } from '../../core/text';
+import type { BookMeta } from '../../core/types';
 import { importBackup } from '../../db/backup';
 import { getAllBooks, getChapters } from '../../db/books';
-import { books, reloadAfterRestore, saveImportedBook } from '../../state/library';
+import { books, progressMap, reloadAfterRestore, saveImportedBook, saveProgress } from '../../state/library';
 import { updateSettings } from '../../state/settings';
 
 /** Одна книга из вставки или файла, ещё не сохранённая: читатель смотрит и правит её в предпросмотре. */
@@ -62,19 +64,29 @@ function makeDraft(parsed: ParsedBook, source: Draft['source']): Draft {
   };
 }
 
-/** Копия библиотеки, если текст — JSON этого приложения; `null`, если это не JSON или чужой JSON. */
-function readBackup(raw: string): BackupFile | null {
+/** Копию не удалось прочитать: файл оборван, сломан или сделан более новой версией приложения. */
+export const BROKEN_BACKUP = 'Файл копии повреждён или сделан более новой версией приложения';
+
+/**
+ * Копия библиотеки, если текст — JSON этого приложения; `null` — это не копия (обычный текст, чужой JSON).
+ * Что не разобралось, но было копией, — ошибка, а не «книга» из обрывка JSON: так бывает, если вставили не
+ * всё или файл докачался не до конца. Копией считаем `.json`-файл и текст с `{`, в котором есть
+ * `kisr-library-backup`; чужой JSON, вставленный как текст, остаётся текстом.
+ */
+function readBackup(raw: string, fileName?: string): BackupFile | null {
   const text = raw.replace(/^﻿/, '').trim();
-  if (!text.startsWith('{')) return null;
+  const isJsonFile = !!fileName && /.json$/i.test(fileName);
+  if (!text || !(isJsonFile || text.startsWith('{'))) return null;
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
+    if (isJsonFile || (text.startsWith('{') && text.includes(BACKUP_FORMAT))) throw new Error(BROKEN_BACKUP);
     return null;
   }
   if (isBackup(json)) return json;
   if (typeof json === 'object' && json !== null && (json as { format?: unknown }).format === BACKUP_FORMAT) {
-    throw new Error('Файл копии повреждён или сделан более новой версией приложения');
+    throw new Error(BROKEN_BACKUP);
   }
   return null;
 }
@@ -82,12 +94,12 @@ function readBackup(raw: string): BackupFile | null {
 /**
  * Что вставили или выбрали. Копия библиотеки — `backup`; всё остальное — книги (одна или несколько),
  * даже если это мусор: парсер превратит его в одну главу «Текст» с предупреждением.
- * Бросает ошибку только для файла копии, который нельзя прочитать.
+ * Бросает ошибку (`BROKEN_BACKUP`) только для копии, которую нельзя прочитать.
  * `fileName` — запасное название книги без шапки.
  */
 export function readInput(text: string, source: Draft['source'], fileName?: string): ReadResult {
   const raw = String(text ?? '');
-  const file = readBackup(raw);
+  const file = readBackup(raw, fileName);
   if (file) return { kind: 'backup', file };
   return { kind: 'books', drafts: splitBooks(raw).map((chunk) => makeDraft(parseBook(chunk, { fileName }), source)) };
 }
@@ -157,6 +169,7 @@ export async function commitDraft(d: Draft, now: number): Promise<{ bookId: stri
     const chapters = d.resolution === 'append' ? await getChapters(existing.id) : [];
     const built = applyResolution({ meta: existing, chapters }, parsed, d.resolution, now);
     await saveImportedBook(built.meta, built.chapters);
+    if (d.resolution === 'append') await reopenAfterAppend(built.meta, existing.chapters.length);
     result = { bookId: existing.id, action: d.resolution === 'update' ? 'updated' : 'appended' };
   } else {
     const built = buildBook(parsed, { origin: d.source, now: freeStamp(parsed.title, now) });
@@ -165,6 +178,14 @@ export async function commitDraft(d: Draft, now: number): Promise<{ bookId: stri
   }
   askPersistOnce();
   return result;
+}
+
+/** Прочитанная книга, в которую дописали главы, снова «Читаю» (сам прогресс уже ограничен `saveImportedBook`). */
+async function reopenAfterAppend(meta: BookMeta, chaptersBefore: number): Promise<void> {
+  const progress = progressMap.value.get(meta.id);
+  if (!progress) return;
+  const next = reopenIfGrown(progress, meta, chaptersBefore);
+  if (next !== progress) await saveProgress(next);
 }
 
 /** Текст тоста после сохранения: одна книга — своими словами, несколько — итогом. */

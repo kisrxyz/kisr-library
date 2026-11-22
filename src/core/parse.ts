@@ -68,13 +68,15 @@ function headerAfter(lines: string[], i: number): number {
 
 /**
  * Снимает обёртку ```markdown (или ````markdown, ~~~) вокруг книги: открывашку над шапкой и закрывашку.
- * Остальное остаётся: в обёртке могут быть блоки ```cards, а после неё — фраза вроде
- * «Хочешь, сделаю продолжение?».
+ * В обёртке могут быть блоки ```cards — они остаются. Книга в обёртке кончается на закрывашке: всё после
+ * неё (фраза вроде «Хочешь, сделаю продолжение?», «А вот вторая, как просил:») до открывашки или шапки
+ * следующей книги, а если такой нет — до конца текста, отбрасывается. У книги без обёртки хвост не
+ * отличить от текста, поэтому он остаётся в последней главе.
  *
  * Идёт по строкам как Markdown-разборщик: помнит, внутри обёртки ли он и внутри ли вложенного блока.
  * Открывашка — забор без языка (или `markdown`/`md`), за которым сразу шапка. Закрывашка — первый
  * забор без языка, не закрывающий вложенный блок и не короче открывашки (так находятся и ```, и ````).
- * Если обёртку не закрыли и дальше открылась новая, прежняя просто снимается.
+ * Если обёртку не закрыли и дальше открылась новая, прежняя просто снимается (и ничего не отбрасывается).
  *
  * `all = false`: только обёртка первой шапки (вставка одной книги, шапка в первых 600 символах).
  * `all = true`: обёртки у всех шапок (несколько книг в одной вставке, в общем или в разных заборах).
@@ -92,7 +94,16 @@ function unwrapFences(s: string, all: boolean): string {
   const drop: number[] = [];
   let wrapper: Fence | null = null;
   let inner: Fence | null = null;
+  let chatter = false; // после закрывашки: болтовня до следующей книги
   for (let i = 0; i < lines.length; i++) {
+    if (chatter) {
+      if (!isHeaderAt(lines, i) && !(isWrapperFence(fenceOf(lines[i])) && headerAfter(lines, i) >= 0)) {
+        drop.push(i);
+        continue;
+      }
+      if (!all) break; // вставка одной книги: что дальше — не наше
+      chatter = false;
+    }
     if (!all && !wrapper && isHeaderAt(lines, i)) break; // первая шапка без обёртки
     const f = fenceOf(lines[i]);
     if (!f) continue;
@@ -103,7 +114,7 @@ function unwrapFences(s: string, all: boolean): string {
     if (wrapper && f.ch === wrapper.ch && f.info === '' && f.len >= wrapper.len) {
       drop.push(i);
       wrapper = null;
-      if (!all) break;
+      chatter = true;
       continue;
     }
     const h = isWrapperFence(f) ? headerAfter(lines, i) : -1;
