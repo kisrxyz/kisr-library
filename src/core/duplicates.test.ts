@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildBook, contentHashOf } from './book';
-import { applyResolution, defaultResolution, findDuplicate } from './duplicates';
+import { applyResolution, defaultResolution, findDuplicate, partAlreadyIn } from './duplicates';
 import type { ParsedBook } from './parse';
 import { newProgress, clampProgress } from './progress';
 import type { BookMeta } from './types';
@@ -74,6 +74,49 @@ describe('findDuplicate', () => {
   it('пустая полка — null', () => {
     const parsed = parsedOf('Любая', ['А']);
     expect(findDuplicate(parsed, hashOf(parsed), [])).toBeNull();
+  });
+});
+
+describe('часть книги, которая уже в книге (вставили ещё раз)', () => {
+  // На полке собраны части 1 и 2: «Начало», «Середина» + «Развязка», «Итог»
+  const part1 = parsedOf('Длинная книга', ['Начало', 'Середина'], { part: { n: 1, of: 2 } });
+  const part2 = parsedOf('Длинная книга', ['Развязка', 'Итог'], { part: { n: 2, of: 2 } });
+  const merged = applyResolution(stored(part1, 'dlinnaya-xyz'), part2, 'append', T1).meta;
+  const resolve = (p: ParsedBook) => {
+    const dup = findDuplicate(p, contentHashOf(p.chapters), [merged]);
+    expect(dup?.kind).toBe('same-title');
+    return { dup, res: defaultResolution(p, dup) };
+  };
+
+  it('часть 1 ещё раз после того, как части собраны: «Пропустить», а не «Обновить» (часть 2 не пропадёт)', () => {
+    const { dup, res } = resolve(part1);
+    expect(res).toBe('skip');
+    expect(partAlreadyIn(part1, dup!.book)).toBe(true);
+  });
+
+  it('часть 2 ещё раз: «Пропустить», а не «Дописать» второй раз', () => {
+    expect(resolve(part2).res).toBe('skip');
+  });
+
+  it('изменённая часть (другой текст) — как раньше: часть 1 «Обновить», часть 2 «Дописать»', () => {
+    const changed = (p: ParsedBook): ParsedBook => ({
+      ...p,
+      chapters: p.chapters.map((c, i) => (i === 0 ? { ...c, md: c.md + ' И ещё одна новая фраза.' } : c)),
+    });
+    expect(partAlreadyIn(changed(part1), merged)).toBe(false);
+    expect(resolve(changed(part1)).res).toBe('update');
+    expect(resolve(changed(part2)).res).toBe('append');
+  });
+
+  it('часть с новой главой — не «уже в книге»', () => {
+    const more = parsedOf('Длинная книга', ['Развязка', 'Итог', 'Послесловие'], { part: { n: 2, of: 2 } });
+    expect(resolve(more).res).toBe('append');
+  });
+
+  it('книга без part с теми же главами — как раньше, «Обновить»', () => {
+    const whole = parsedOf('Длинная книга', ['Начало', 'Середина']);
+    expect(partAlreadyIn(whole, merged)).toBe(false);
+    expect(resolve(whole).res).toBe('update');
   });
 });
 

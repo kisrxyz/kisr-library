@@ -1,7 +1,7 @@
 /** Дубли при добавлении книги (spec §7.2): поиск, решение по умолчанию, применение «Обновить» и «Дописать». */
 import { buildBook } from './book';
 import type { ParsedBook } from './parse';
-import { normalizeTitle } from './text';
+import { countWords, normalizeTitle } from './text';
 import type { BookMeta, Chapter } from './types';
 
 export type Resolution = 'update' | 'append' | 'separate' | 'skip';
@@ -20,9 +20,22 @@ export function findDuplicate(parsed: ParsedBook, contentHash: string, books: Bo
   return null;
 }
 
+/**
+ * Часть книги (`part`), все главы которой уже есть в книге на полке — то же название и столько же слов.
+ * Так бывает, когда буфер обмена ещё хранит часть, которую уже добавили: «Обновить» частью 1 стёрло бы
+ * часть 2, а «Дописать» частью 2 задвоило бы её главы. Изменённая часть (другой текст) сюда не попадает.
+ */
+export function partAlreadyIn(parsed: ParsedBook, book: BookMeta): boolean {
+  if (!parsed.part || parsed.chapters.length === 0) return false;
+  return parsed.chapters.every((c) => {
+    const words = countWords(c.md);
+    return book.chapters.some((b) => b.title === c.title && b.words === words);
+  });
+}
+
 export function defaultResolution(parsed: ParsedBook, dup: Duplicate): Resolution {
   if (!dup) return 'separate';
-  if (dup.kind === 'same-content') return 'skip';
+  if (dup.kind === 'same-content' || partAlreadyIn(parsed, dup.book)) return 'skip';
   return parsed.part && parsed.part.n > 1 ? 'append' : 'update';
 }
 

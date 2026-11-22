@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { countWords } from './text';
-import { parseBook, parseFront, reassemble, splitBooks } from './parse';
+import { countWords, plural } from './text';
+import { parseBook, parseBooks, parseFront, reassemble, splitBooks } from './parse';
 
 const fixture = (name: string) => readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
 const titles = (raw: string) => parseBook(raw).chapters.map((c) => c.title);
@@ -186,6 +186,81 @@ describe('parseBook: обёртки разной формы', () => {
     const b = parseBook(raw);
     expect(b.title).toBe('Т');
     expect(b.chapters[0].md).toContain('```markdown\n---\ntitle: Образец\n---\nтекст\n```');
+  });
+});
+
+describe('parseBook: блок кода без языка внутри книги в обёртке', () => {
+  const code = '```\nпример кода без языка\n```';
+  const cards = '```cards\nQ: а\nA: б\n```';
+  const fenced = (fence: string) =>
+    `Вот разбор:\n\n${fence}markdown\n---\ntitle: Т\ncategory: К\n---\n## Первая\nТекст первой главы.\n\n${code}\n\nПосле кода.\n\n` +
+    `## Вторая\nТекст второй главы.\n\n## Карточки\n${cards}\n${fence}\n\nХочешь, сделаю продолжение?`;
+  const firstMd = `Текст первой главы.\n\n${code}\n\nПосле кода.`;
+
+  it('``` вокруг книги: блок в главе 1 — не закрывашка, главы 2 и 3 целы, предупреждений нет', () => {
+    const b = parseBook(fenced('```'));
+    expect(b.chapters.map((c) => c.title)).toEqual(['Первая', 'Вторая', 'Карточки']);
+    expect(b.chapters[0].md).toBe(firstMd);
+    expect(b.chapters[1].md).toBe('Текст второй главы.');
+    expect(b.chapters[2].md).toBe(cards);
+    expect(b.warnings).toEqual([]);
+  });
+  it('то же через splitBooks и parseBooks', () => {
+    const parts = splitBooks(fenced('```'));
+    expect(parts).toHaveLength(1);
+    expect(parseBook(parts[0]).chapters.map((c) => c.title)).toEqual(['Первая', 'Вторая', 'Карточки']);
+    const [b] = parseBooks(fenced('```'));
+    expect(b.chapters.map((c) => c.md)).toEqual([firstMd, 'Текст второй главы.', cards]);
+    expect(b.warnings).toEqual([]);
+  });
+  it('обёртка из четырёх ` с тем же блоком — как раньше', () => {
+    const b = parseBook(fenced('````'));
+    expect(b.chapters.map((c) => c.md)).toEqual([firstMd, 'Текст второй главы.', cards]);
+  });
+  it('блок без языка в последней главе: хвост главы после блока не отбрасывается', () => {
+    const raw = `\`\`\`markdown\n---\ntitle: Т\npart: 1/2\n---\n## Первая\nтекст\n\n## Последняя\nДо кода.\n\n${code}\n\nПосле кода.\n\`\`\`\nХочешь?`;
+    const b = parseBook(raw);
+    expect(b.chapters.map((c) => c.md)).toEqual(['текст', `До кода.\n\n${code}\n\nПосле кода.`]);
+    expect(b.warnings).toEqual([]);
+  });
+  it('две книги в одной обёртке ```, блок без языка в последней главе первой', () => {
+    const raw = `\`\`\`markdown\n---\ntitle: А\n---\n## Г\nДо кода.\n\n${code}\n\nПосле кода.\n\n---\ntitle: Б\n---\n## Г\nтекст б\n\`\`\``;
+    const [a, b] = parseBooks(raw);
+    expect(a.chapters.map((c) => c.md)).toEqual([`До кода.\n\n${code}\n\nПосле кода.`]);
+    expect(b.chapters.map((c) => c.md)).toEqual(['текст б']);
+  });
+});
+
+describe('parseBook: много текста после книги в обёртке', () => {
+  const lost = (n: number) => `После книги отброшен текст (${n} ${plural(n, 'слово', 'слова', 'слов')}) — проверь, не потерялась ли часть книги`;
+  const after = (tail: string) => `\`\`\`markdown\n---\ntitle: Т\n---\n## Глава\nтекст\n\`\`\`\n\n${tail}`;
+  const hasLost = (warnings: string[]) => warnings.some((w) => w.startsWith('После книги отброшен текст'));
+
+  it('50 слов после закрывашки: отброшены, но есть предупреждение', () => {
+    const b = parseBook(after(words(50, 'болтовня')));
+    expect(b.chapters.map((c) => c.md)).toEqual(['текст']);
+    expect(b.warnings).toContain('После книги отброшен текст (50 слов) — проверь, не потерялась ли часть книги');
+  });
+  it('короткий вопрос после книги — без предупреждения', () => {
+    expect(hasLost(parseBook(after('Хочешь, сделаю продолжение?')).warnings)).toBe(false);
+  });
+  it('граница: 30 слов — без предупреждения, 31 — с ним', () => {
+    expect(hasLost(parseBook(after(words(30))).warnings)).toBe(false);
+    expect(parseBook(after(words(31))).warnings).toContain(lost(31));
+  });
+  it('parseBooks: предупреждение у той книги, после которой отброшен текст', () => {
+    const raw = `${after(words(50, 'болтовня'))}\n\n\`\`\`markdown\n---\ntitle: Б\n---\n## Глава\nтекст б\n\`\`\`\nХочешь третью?`;
+    const [a, b] = parseBooks(raw);
+    expect(a.title).toBe('Т');
+    expect(a.chapters.map((c) => c.md)).toEqual(['текст']);
+    expect(a.warnings).toContain(lost(50));
+    expect(b.title).toBe('Б');
+    expect(hasLost(b.warnings)).toBe(false);
+  });
+  it('parseBooks и одна книга с хвостом — то же, что parseBook', () => {
+    const [b] = parseBooks(`Держи:\n\n${after(words(50, 'болтовня'))}`);
+    expect(b.chapters.map((c) => c.md)).toEqual(['текст']);
+    expect(b.warnings).toContain(lost(50));
   });
 });
 
@@ -500,6 +575,15 @@ describe.skipIf(!existsSync(rawSections) || !existsSync(rawArticles))(
         expect(parsed.chapters.map((c) => c.title)).toEqual(chapters.map((c) => c.title));
         expect(parsed.chapters).toHaveLength(chapters.length);
         expect(parsed.title).toBe(a.title);
+
+        // Та же книга, вставленная из ответа Claude в обёртке и с вопросом после неё, — те же главы.
+        for (const fence of ['```', '````']) {
+          const raw = `Вот разбор:\n\n${fence}markdown\n${reassemble(a, chapters)}\n${fence}\n\nХочешь, сделаю продолжение?`;
+          for (const b of [parseBook(raw), ...parseBooks(raw)]) {
+            expect(b.chapters).toEqual(parsed.chapters);
+            expect(b.warnings.some((w) => w.startsWith('После книги'))).toBe(false);
+          }
+        }
       });
     }
   },

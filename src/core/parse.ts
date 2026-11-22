@@ -5,7 +5,7 @@
  * Контракт формата — docs/book-format.md, spec §7.1.
  */
 import { countCards } from './cards';
-import { countWords, plainText } from './text';
+import { countWords, plainText, plural } from './text';
 import type { BookMeta } from './types';
 
 export interface ParsedChapter {
@@ -32,6 +32,10 @@ type FrontValue = string | string[];
 const HEADER_START = /^---[ \t]*\n[ \t]*title[ \t]*:/im;
 /** Сколько символов мусора перед шапкой прощаем. */
 const PREAMBLE_LIMIT = 600;
+/** Больше стольких слов, отброшенных после книги, — повод предупредить: это могла быть часть книги. */
+const CHATTER_WORDS = 30;
+/** Заголовок `#`, `##` или `###`. */
+const HEADING_LINE = /^[ \t]{0,3}#{1,3}[ \t]/;
 
 /** Значение шапки как строка (массив склеивается через запятую). */
 function str(v: FrontValue | undefined): string {
@@ -66,24 +70,55 @@ function headerAfter(lines: string[], i: number): number {
   return j < lines.length && isHeaderAt(lines, j) ? j : -1;
 }
 
+/** Со строки i начинается книга: шапка или забор-обёртка, за которым сразу шапка. */
+function bookStartsAt(lines: string[], i: number): boolean {
+  return isHeaderAt(lines, i) || (isWrapperFence(fenceOf(lines[i])) && headerAfter(lines, i) >= 0);
+}
+
+/** Забор f может закрыть блок `open`: тот же знак, без языка, не короче. */
+const closes = (f: Fence, open: Fence): boolean => f.ch === open.ch && f.info === '' && f.len >= open.len;
+
+/**
+ * Забор без языка на строке i внутри обёртки — её закрывашка, только если до начала следующей книги
+ * (или до конца текста) после него нет ни заголовка `#`–`###`, ни ещё одного забора, который мог бы
+ * закрыть обёртку. Иначе это начало вложенного блока кода без языка, а книга идёт дальше: принять его за
+ * закрывашку значит выбросить остаток книги как болтовню.
+ */
+function closesWrapper(lines: string[], i: number, wrapper: Fence): boolean {
+  for (let j = i + 1; j < lines.length && !bookStartsAt(lines, j); j++) {
+    if (HEADING_LINE.test(lines[j])) return false;
+    const f = fenceOf(lines[j]);
+    if (f && closes(f, wrapper)) return false;
+  }
+  return true;
+}
+
+/** Болтовня, отброшенная после закрывашки: где была (смещение в тексте) и сколько в ней слов. */
+interface Chatter {
+  at: number;
+  words: number;
+}
+
 /**
  * Снимает обёртку ```markdown (или ````markdown, ~~~) вокруг книги: открывашку над шапкой и закрывашку.
- * В обёртке могут быть блоки ```cards — они остаются. Книга в обёртке кончается на закрывашке: всё после
- * неё (фраза вроде «Хочешь, сделаю продолжение?», «А вот вторая, как просил:») до открывашки или шапки
- * следующей книги, а если такой нет — до конца текста, отбрасывается. У книги без обёртки хвост не
- * отличить от текста, поэтому он остаётся в последней главе.
+ * В обёртке могут быть блоки ```cards и блоки кода без языка — они остаются. Книга в обёртке кончается на
+ * закрывашке: всё после неё (фраза вроде «Хочешь, сделаю продолжение?», «А вот вторая, как просил:») до
+ * открывашки или шапки следующей книги, а если такой нет — до конца текста, отбрасывается; сколько слов
+ * отброшено, возвращается в `chatter`. У книги без обёртки хвост не отличить от текста, поэтому он
+ * остаётся в последней главе.
  *
  * Идёт по строкам как Markdown-разборщик: помнит, внутри обёртки ли он и внутри ли вложенного блока.
- * Открывашка — забор без языка (или `markdown`/`md`), за которым сразу шапка. Закрывашка — первый
- * забор без языка, не закрывающий вложенный блок и не короче открывашки (так находятся и ```, и ````).
- * Если обёртку не закрыли и дальше открылась новая, прежняя просто снимается (и ничего не отбрасывается).
+ * Открывашка — забор без языка (или `markdown`/`md`), за которым сразу шапка. Закрывашка — забор без
+ * языка, не закрывающий вложенный блок, не короче открывашки (так находятся и ```, и ````) и такой, что
+ * после него книга уже не продолжается (`closesWrapper`). Если обёртку не закрыли и дальше открылась
+ * новая, прежняя просто снимается (и ничего не отбрасывается).
  *
  * `all = false`: только обёртка первой шапки (вставка одной книги, шапка в первых 600 символах).
  * `all = true`: обёртки у всех шапок (несколько книг в одной вставке, в общем или в разных заборах).
  */
-function unwrapFences(s: string, all: boolean): string {
+function unwrapFences(s: string, all: boolean): { text: string; chatter: Chatter[] } {
   const lines = s.split('\n');
-  if (!all && /^---[ \t]*$/.test(lines[0])) return s; // книга начинается с шапки: обёртки нет
+  if (!all && /^---[ \t]*$/.test(lines[0])) return { text: s, chatter: [] }; // книга начинается с шапки: обёртки нет
   const offsets: number[] = [];
   let sum = 0;
   for (const line of lines) {
@@ -92,13 +127,15 @@ function unwrapFences(s: string, all: boolean): string {
   }
 
   const drop: number[] = [];
+  const tails: { line: number; words: number }[] = [];
   let wrapper: Fence | null = null;
   let inner: Fence | null = null;
   let chatter = false; // после закрывашки: болтовня до следующей книги
   for (let i = 0; i < lines.length; i++) {
     if (chatter) {
-      if (!isHeaderAt(lines, i) && !(isWrapperFence(fenceOf(lines[i])) && headerAfter(lines, i) >= 0)) {
+      if (!bookStartsAt(lines, i)) {
         drop.push(i);
+        tails[tails.length - 1].words += countWords(lines[i]);
         continue;
       }
       if (!all) break; // вставка одной книги: что дальше — не наше
@@ -108,26 +145,37 @@ function unwrapFences(s: string, all: boolean): string {
     const f = fenceOf(lines[i]);
     if (!f) continue;
     if (inner) {
-      if (f.ch === inner.ch && f.info === '' && f.len >= inner.len) inner = null;
+      if (closes(f, inner)) inner = null;
       continue;
     }
-    if (wrapper && f.ch === wrapper.ch && f.info === '' && f.len >= wrapper.len) {
+    if (wrapper && closes(f, wrapper) && closesWrapper(lines, i, wrapper)) {
       drop.push(i);
+      tails.push({ line: i, words: 0 });
       wrapper = null;
       chatter = true;
       continue;
     }
     const h = isWrapperFence(f) ? headerAfter(lines, i) : -1;
     if (h >= 0) {
-      if (!all && offsets[h] > PREAMBLE_LIMIT) return s; // шапка слишком далеко: это не вставка с обёрткой
+      if (!all && offsets[h] > PREAMBLE_LIMIT) return { text: s, chatter: [] }; // шапка слишком далеко: это не вставка с обёрткой
       drop.push(i);
       wrapper = f;
     } else {
-      inner = f; // обычный блок кода (```cards и т. п.)
+      inner = f; // обычный блок кода (```cards, блок без языка и т. п.)
     }
   }
   for (const i of drop) lines[i] = '';
-  return lines.join('\n');
+  // Смещения строк в тексте без отброшенного: строки обнулены, поэтому считаем заново.
+  const at: number[] = [];
+  sum = 0;
+  for (const line of lines) {
+    at.push(sum);
+    sum += line.length + 1;
+  }
+  return {
+    text: lines.join('\n'),
+    chatter: tails.filter((t) => t.words > 0).map((t) => ({ at: at[t.line], words: t.words })),
+  };
 }
 
 /** Весь текст в обёртке ```markdown … ``` → внутренность (забор любой длины, ` или ~). */
@@ -167,23 +215,32 @@ function closedBeforeNextBook(lines: string[], opener: Fence): boolean {
   return false;
 }
 
-/** Отбрасывает всё до шапки, если шапка начинается в первых 600 символах (spec §7.1). */
-function stripPreamble(s: string): string {
-  if (/^---[ \t]*(\n|$)/.test(s)) return s;
+/** Сколько символов в начале — мусор до шапки: шапка начинается в первых 600 символах (spec §7.1). 0 — ничего. */
+function preambleLength(s: string): number {
+  if (/^---[ \t]*(\n|$)/.test(s)) return 0;
   const m = HEADER_START.exec(s);
-  if (!m || m.index > PREAMBLE_LIMIT) return s;
-  return s.slice(m.index).trim();
+  return !m || m.index > PREAMBLE_LIMIT ? 0 : m.index;
 }
 
-/** BOM, \r, обёртка ```markdown, мусор до шапки. */
-function prepare(raw: string, all = false): string {
+/** BOM, \r, обёртка ```markdown, мусор до шапки. `chatter` — что отброшено после книг (смещения — в `text`). */
+function prepare(raw: string, all = false): { text: string; chatter: Chatter[] } {
   let s = cleanModelMd(String(raw || '').replace(/\r/g, ''));
   if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
-  return stripPreamble(unwrapFences(s, all));
+  const unwrapped = unwrapFences(s, all);
+  const cut = preambleLength(unwrapped.text);
+  if (!cut) return unwrapped;
+  return {
+    text: unwrapped.text.slice(cut).trim(),
+    chatter: unwrapped.chatter.map((c) => ({ at: c.at - cut, words: c.words })),
+  };
 }
 
 export function parseFront(md: string): { meta: Record<string, FrontValue>; body: string } {
-  const s = prepare(md);
+  return frontOf(prepare(md).text);
+}
+
+/** Шапка и тело уже подготовленного текста (`prepare`). */
+function frontOf(s: string): { meta: Record<string, FrontValue>; body: string } {
   const m = s.match(/^---\s*\n([\s\S]*?)\n---\s*(\n|$)/);
   if (!m) return { meta: {}, body: s };
   const meta: Record<string, FrontValue> = {};
@@ -318,8 +375,17 @@ function parsePart(v: FrontValue | undefined): ParsedBook['part'] {
 }
 
 export function parseBook(raw: string, opts: { fileName?: string } = {}): ParsedBook {
+  return bookOf(raw, opts, 0);
+}
+
+/**
+ * Разбор одной книги. `lostBefore` — сколько слов после этой книги уже отбросили при делении вставки
+ * на книги (`parseBooks`); вместе с тем, что отбросит её собственная подготовка, это повод предупредить.
+ */
+function bookOf(raw: string, opts: { fileName?: string }, lostBefore: number): ParsedBook {
   const warnings: string[] = [];
-  const { meta, body: framed } = parseFront(raw);
+  const prepared = prepare(raw);
+  const { meta, body: framed } = frontOf(prepared.text);
   const hasHeader = Object.keys(meta).length > 0;
 
   // Строка-подпись вида «Автор · @имя» сразу после шапки
@@ -412,19 +478,52 @@ export function parseBook(raw: string, opts: { fileName?: string } = {}): Parsed
   // Карточки стоят в последней части: у не последней (или с неизвестным числом частей) их может не быть.
   const nonFinalPart = !!part && (!part.of || part.n < part.of);
   if (!nonFinalPart && !chapters.some((c) => countCards(c.md) > 0)) warnings.push('Карточек нет');
+
+  // Отброшенное после закрывашки обычно — фраза Claude. Если слов много, это могла быть часть книги.
+  const lost = lostBefore + prepared.chatter.reduce((n, c) => n + c.words, 0);
+  if (lost > CHATTER_WORDS) {
+    warnings.unshift(
+      `После книги отброшен текст (${lost} ${plural(lost, 'слово', 'слова', 'слов')}) — проверь, не потерялась ли часть книги`,
+    );
+  }
   return book;
 }
 
+/** Книга из вставки и сколько слов болтовни отброшено после неё. */
+interface BookChunk {
+  text: string;
+  lost: number;
+}
+
 /** Несколько книг в одной вставке: новая книга начинается с `---` + `title:` в начале строки. */
-export function splitBooks(raw: string): string[] {
-  const s = prepare(raw, true);
+function chunksOf(raw: string): BookChunk[] {
+  const { text: s, chatter } = prepare(raw, true);
   if (!s) return [];
   const starts: number[] = [];
   const re = new RegExp(HEADER_START.source, 'gim');
   for (let m = re.exec(s); m; m = re.exec(s)) starts.push(m.index);
-  if (starts.length < 2) return [s];
+  // Отброшенное после книги считается ей: оно стоит до шапки следующей книги.
+  const lostIn = (from: number, to: number) =>
+    chatter.filter((c) => c.at >= from && c.at < to).reduce((n, c) => n + c.words, 0);
+  if (starts.length < 2) return [{ text: s, lost: lostIn(0, Infinity) }];
   // Первая книга забирает всё, что стоит до её шапки: парсер сам решит, что с этим делать.
-  return starts.map((_, i) => s.slice(i === 0 ? 0 : starts[i], starts[i + 1] ?? s.length).trim());
+  return starts.map((_, i) => {
+    const from = i === 0 ? 0 : starts[i];
+    return { text: s.slice(from, starts[i + 1] ?? s.length).trim(), lost: lostIn(from, starts[i + 1] ?? Infinity) };
+  });
+}
+
+/** Несколько книг в одной вставке: новая книга начинается с `---` + `title:` в начале строки. */
+export function splitBooks(raw: string): string[] {
+  return chunksOf(raw).map((c) => c.text);
+}
+
+/**
+ * Все книги вставки, разобранные: `splitBooks` + `parseBook`, но предупреждение об отброшенном после
+ * книги тексте доходит до своей книги (при делении на книги болтовня отбрасывается раньше разбора).
+ */
+export function parseBooks(raw: string, opts: { fileName?: string } = {}): ParsedBook[] {
+  return chunksOf(raw).map((c) => bookOf(c.text, opts, c.lost));
 }
 
 /** Книга → текст в формате `book-format.md` (обратная сборка для экспорта и проверок). */

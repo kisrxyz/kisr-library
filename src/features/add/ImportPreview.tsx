@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { countCards } from '../../core/cards';
-import type { Resolution } from '../../core/duplicates';
+import { partAlreadyIn, type Resolution } from '../../core/duplicates';
 import { countWords, plural } from '../../core/text';
 import { minutesLabel } from '../../core/time';
 import { toHash } from '../../router';
@@ -26,16 +26,18 @@ interface ImportPreviewProps {
 /** Выбран пункт «Новый раздел…»: название вводится в отдельном поле. */
 const NEW_CATEGORY = '\u0000new';
 
-const CHOICES: SegmentedOption<Exclude<Resolution, 'skip'>>[] = [
+/** «Пропустить» среди вариантов нет: оно стоит по умолчанию у части, которая уже в книге (ничего не выбрано). */
+const CHOICES: SegmentedOption<Resolution>[] = [
   { value: 'update', label: 'Обновить' },
   { value: 'append', label: 'Дописать' },
   { value: 'separate', label: 'Отдельно' },
 ];
 
-const EXPLAIN: Record<Exclude<Resolution, 'skip'>, string> = {
+const EXPLAIN: Record<Resolution, string> = {
   update: 'Текст заменится новым. Прогресс и отметки останутся; если глав стало меньше, место в книге сдвинется.',
   append: 'Главы добавятся в конец книги: так собирают книгу, которая пришла частями.',
   separate: 'На полке будет две книги с таким названием.',
+  skip: 'Все главы этой части уже есть в книге, сохранять нечего.',
 };
 
 /** «7 глав · ≈ 12 мин · 10 карточек» */
@@ -107,7 +109,7 @@ export function ImportPreview({ draft: d, position, categories, wpm, busy, onCha
       {sameTitle && d.dup && (
         <div class="pv__dup">
           <p class="pv__duptext">
-            <strong>На полке уже есть такая книга</strong>
+            <strong>{partAlreadyIn(d.parsed, d.dup.book) ? 'Эта часть уже в книге' : 'На полке уже есть такая книга'}</strong>
             <span>
               «{d.dup.book.title}», {d.dup.book.chapters.length} {plural(d.dup.book.chapters.length, 'глава', 'главы', 'глав')}.{' '}
               <a href={toHash({ name: 'book', id: d.dup.book.id })}>Открыть</a>
@@ -116,10 +118,10 @@ export function ImportPreview({ draft: d, position, categories, wpm, busy, onCha
           <Segmented
             label="Что сделать с книгой на полке"
             options={CHOICES}
-            value={d.resolution === 'skip' ? 'update' : d.resolution}
+            value={d.resolution}
             onChange={(resolution) => onChange({ resolution })}
           />
-          <p class="pv__note">{EXPLAIN[d.resolution === 'skip' ? 'update' : d.resolution]}</p>
+          <p class="pv__note">{EXPLAIN[d.resolution]}</p>
         </div>
       )}
 

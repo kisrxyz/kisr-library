@@ -152,6 +152,14 @@ describe('readInput: что вставили', () => {
     expect(chatty.map((d) => d.hash)).toEqual(clean.map((d) => d.hash));
   });
 
+  it('много текста после книги в заборе: он отброшен, а в предпросмотре есть предупреждение', () => {
+    const tail = Array.from({ length: 50 }, () => 'болтовня').join(' ');
+    const [d] = drafts(`\`\`\`markdown\n${bookText('Тихая работа', 2)}\`\`\`\n\n${tail}`);
+    expect(d.parsed.chapters.map((c) => c.title)).toEqual(['Глава 1', 'Глава 2']);
+    expect(d.parsed.chapters.at(-1)!.md).not.toContain('болтовня');
+    expect(draftWarnings(d)).toContain('После книги отброшен текст (50 слов) — проверь, не потерялась ли часть книги');
+  });
+
   it('пустая вставка → нет черновиков', () => {
     expect(drafts('  \n\n ')).toEqual([]);
     expect(drafts('')).toEqual([]);
@@ -209,7 +217,8 @@ describe('readInput: дубли с полкой', () => {
     const [again] = drafts(bookText('тихая  работа!', 3));
     expect(again.dup?.kind).toBe('same-title');
     expect(again.resolution).toBe('update');
-    const [cont] = drafts(bookText('Тихая работа', 1, 'part: 2/2\n'));
+    // у части 2 свои главы (часть с теми же главами, что уже в книге, — «Пропустить», см. ниже)
+    const [cont] = drafts(bookText('Тихая работа', 1, 'part: 2/2\n').replace('## Глава 1', '## Глава 3'));
     expect(cont.resolution).toBe('append');
   });
 
@@ -219,6 +228,47 @@ describe('readInput: дубли с полкой', () => {
     expect(same.dup?.kind).toBe('same-content');
     expect(same.resolution).toBe('skip');
     expect(canSaveDraft(same)).toBe(false);
+  });
+
+  describe('часть, которая уже в книге (буфер ещё хранит её)', () => {
+    const part = (n: number, names: string[]) =>
+      `---\ntitle: Тихая работа\ncategory: Психология\npart: ${n}/2\n---\n` +
+      names.map((t) => `## ${t}\nТекст главы «${t}», в ней несколько слов.`).join('\n\n');
+    const part1 = part(1, ['Начало', 'Середина']);
+    const part2 = part(2, ['Развязка', 'Итог']);
+
+    async function assembled(): Promise<string> {
+      const first = await commitDraft(drafts(part1)[0], 1_700_000_000_000);
+      const [second] = drafts(part2);
+      expect(second.resolution).toBe('append');
+      await commitDraft(second, 1_700_000_001_000);
+      expect((await getChapters(first.bookId)).map((c) => c.title)).toEqual(['Начало', 'Середина', 'Развязка', 'Итог']);
+      return first.bookId;
+    }
+
+    it('часть 1 ещё раз после того, как части собраны: «Пропустить», часть 2 не пропадает', async () => {
+      const id = await assembled();
+      const [again] = drafts(part1);
+      expect(again.dup?.kind).toBe('same-title');
+      expect(again.resolution).toBe('skip');
+      expect(canSaveDraft(again)).toBe(false);
+      expect(await commitDraft(again, 1_700_000_002_000)).toEqual({ bookId: id, action: 'skipped' });
+      expect((await getChapters(id)).map((c) => c.title)).toEqual(['Начало', 'Середина', 'Развязка', 'Итог']);
+    });
+
+    it('часть 2 ещё раз: «Пропустить», главы не задваиваются', async () => {
+      const id = await assembled();
+      const [again] = drafts(part2);
+      expect(again.resolution).toBe('skip');
+      await commitDraft(again, 1_700_000_002_000);
+      expect(await getChapters(id)).toHaveLength(4);
+    });
+
+    it('изменённая часть 2 по-прежнему «Дописать»', async () => {
+      await assembled();
+      const [changed] = drafts(part2.replace('в ней несколько слов.', 'в ней теперь больше слов, чем было.'));
+      expect(changed.resolution).toBe('append');
+    });
   });
 
   it('если в шапке нет раздела и тегов, обновление не стирает раздел и теги книги на полке', async () => {

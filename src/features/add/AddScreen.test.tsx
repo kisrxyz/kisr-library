@@ -236,7 +236,8 @@ describe('дубли', () => {
 
   it('«Дописать» прячет название и добавляет главы в конец', async () => {
     await shelve('Тихая работа', 3);
-    await paste(book('Тихая работа', 2, 'part: 2/2\n'));
+    // у части 2 свои главы: часть с теми же главами, что уже в книге, — «Эта часть уже в книге»
+    await paste(book('Тихая работа', 2, 'part: 2/2\n').replaceAll('## Глава ', '## Продолжение '));
     // часть 2 → «Дописать» уже выбрано
     expect(host.querySelector('.pv [role=radio][aria-checked=true]')?.textContent).toBe('Дописать');
     expect(host.querySelector('.pv input[type=text]')).toBeNull();
@@ -244,6 +245,28 @@ describe('дубли', () => {
     await vi.waitFor(async () => expect((await getChapters('old')).length).toBe(5));
     expect(books.value).toHaveLength(1);
     expect(toastTexts().at(-1)).toBe('Главы дописаны');
+  });
+
+  it('часть, которая уже в книге: «Эта часть уже в книге», ничего не выбрано, сохранять нечего', async () => {
+    const part = (n: number, names: string[]) =>
+      `---\ntitle: Тихая работа\ncategory: Психология\npart: ${n}/2\n---\n` +
+      names.map((t) => `## ${t}\nТекст главы «${t}», в ней несколько слов.`).join('\n\n');
+    const { readInput, commitDraft } = await import('./importFlow');
+    for (const [i, text] of [part(1, ['Начало', 'Середина']), part(2, ['Развязка', 'Итог'])].entries()) {
+      const res = readInput(text, 'paste');
+      if (res.kind !== 'books') throw new Error('книги');
+      await commitDraft(res.drafts[0], 1_700_000_000_000 + i);
+    }
+
+    await paste(part(1, ['Начало', 'Середина']));
+    expect(host.querySelector('.pv__dup strong')?.textContent).toBe('Эта часть уже в книге');
+    expect(host.querySelector('.pv [role=radio][aria-checked=true]')).toBeNull();
+    expect(button('Сохранить на полку').disabled).toBe(true);
+
+    // Можно всё же выбрать действие: тогда сохранить можно
+    await act(async () => [...host.querySelectorAll<HTMLElement>('.pv [role=radio]')][1].click());
+    expect(host.querySelector('.pv [role=radio][aria-checked=true]')?.textContent).toBe('Дописать');
+    expect(button('Сохранить на полку').disabled).toBe(false);
   });
 
   it('«Отдельно» делает вторую книгу', async () => {

@@ -5,7 +5,7 @@
 import { BACKUP_FORMAT, isBackup, type BackupFile } from '../../core/backup';
 import { buildBook, contentHashOf } from '../../core/book';
 import { applyResolution, defaultResolution, findDuplicate, type Duplicate, type Resolution } from '../../core/duplicates';
-import { parseBook, splitBooks, type ParsedBook } from '../../core/parse';
+import { parseBooks, type ParsedBook } from '../../core/parse';
 import { reopenIfGrown } from '../../core/progress';
 import { countWords, makeBookId } from '../../core/text';
 import type { BookMeta } from '../../core/types';
@@ -101,7 +101,7 @@ export function readInput(text: string, source: Draft['source'], fileName?: stri
   const raw = String(text ?? '');
   const file = readBackup(raw, fileName);
   if (file) return { kind: 'backup', file };
-  return { kind: 'books', drafts: splitBooks(raw).map((chunk) => makeDraft(parseBook(chunk, { fileName }), source)) };
+  return { kind: 'books', drafts: parseBooks(raw, { fileName }).map((parsed) => makeDraft(parsed, source)) };
 }
 
 /** В тексте нет ни одного слова: такую книгу не сохраняем. */

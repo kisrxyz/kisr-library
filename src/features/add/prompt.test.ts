@@ -20,6 +20,10 @@ describe('buildPrompt', () => {
     expect(p).toContain('2000–3500 слов');
   });
 
+  it('без скилла: просит не оборачивать книгу в блок кода', () => {
+    expect(buildPrompt({ ...base, skillInstalled: false })).toContain('Не оборачивай книгу в блок кода');
+  });
+
   it('пожелания попадают в запрос, пустые — нет', () => {
     expect(buildPrompt({ ...base, wishes: '  для новичка, без формул ' })).toContain('Пожелания: для новичка, без формул');
     expect(buildPrompt(base)).not.toContain('Пожелания');
