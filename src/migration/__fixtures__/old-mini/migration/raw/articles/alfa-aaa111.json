@@ -1,0 +1,29 @@
+{
+  "category": "Наука",
+  "createdAt": 1794000000000,
+  "updatedAt": 1794500000000,
+  "origin": "chat",
+  "sections": [
+    {
+      "id": "alfa-aaa111--01",
+      "title": "Вступление",
+      "words": 5
+    },
+    {
+      "id": "alfa-aaa111--02",
+      "title": "Основы",
+      "words": 5
+    },
+    {
+      "id": "alfa-aaa111--03",
+      "title": "Карточки",
+      "words": 5
+    },
+    {
+      "id": "alfa-aaa111--04",
+      "title": "Источники",
+      "words": 5
+    }
+  ],
+  "title": "Первая учебная книга"
+}

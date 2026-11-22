@@ -1,5 +1,5 @@
 # Личные книги и данные пользователя — никогда не коммитить (репозиторий может быть публичным)
-migration/
+/migration/
 *.kisr-backup.json
 kisr-library-backup-*.json
 
@@ -18,5 +18,5 @@ Thumbs.db
 .claude/settings.local.json
 
 # Выгрузка старой библиотеки от владельца (личные тексты)
-kisr-library/
+/kisr-library/
 .playwright-mcp/

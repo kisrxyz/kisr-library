@@ -1,0 +1,38 @@
+{
+  "exported": "2026-11-22",
+  "note": "Синтетическое состояние для тестов.",
+  "prefs": {
+    "fav": [],
+    "last": {
+      "articleId": "alfa-aaa111",
+      "at": 1795000002000,
+      "order": 2
+    },
+    "mode": "auto",
+    "size": 18,
+    "mig": 2
+  },
+  "reading": [
+    {
+      "articleId": "alfa-aaa111",
+      "order": 2,
+      "key": "pnew22",
+      "max": 3,
+      "pin": true,
+      "pinAt": 1795000000500,
+      "at": 1795000002000,
+      "title": "Первая учебная книга"
+    },
+    {
+      "articleId": "beta-bbb222",
+      "order": 1,
+      "key": "hold11",
+      "max": 1,
+      "at": 1795000003000,
+      "title": "Вторая учебная книга"
+    }
+  ],
+  "favorites": [],
+  "notes": [],
+  "tasks_done": {}
+}

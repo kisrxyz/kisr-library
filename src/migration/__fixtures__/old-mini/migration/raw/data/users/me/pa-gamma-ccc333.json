@@ -1,0 +1,20 @@
+{
+  "category": "Жизнь",
+  "createdAt": 1794100000000,
+  "kind": "pa",
+  "origin": "manual",
+  "sections": [
+    {
+      "id": "gamma-ccc333--01",
+      "title": "Вступление",
+      "words": 5
+    },
+    {
+      "id": "gamma-ccc333--02",
+      "title": "Итоги",
+      "words": 5
+    }
+  ],
+  "title": "Третья личная книга",
+  "updatedAt": 1794600000000
+}
