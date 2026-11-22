@@ -7,7 +7,7 @@ export default mergeConfig(
     test: {
       // По умолчанию тесты идут в Node. Тестам с DOM нужна строка `// @vitest-environment jsdom`.
       environment: 'node',
-      include: ['src/**/*.test.{ts,tsx}'],
+      include: ['src/**/*.test.{ts,tsx}', 'claude-skill/**/*.test.ts'],
       setupFiles: ['fake-indexeddb/auto'],
     },
   }),
