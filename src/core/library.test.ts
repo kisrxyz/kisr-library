@@ -263,6 +263,20 @@ describe('isNew', () => {
     const fresh = book('fresh', { addedAt: NOW - HOUR });
     expect(isNew(fresh, prog('fresh'), NOW)).toBe(false);
   });
+
+  it('добавлена вставкой, файлом или через «Поделиться» — новая', () => {
+    for (const origin of ['paste', 'file', 'share'] as const) {
+      expect(isNew(book('o', { origin, addedAt: NOW - HOUR }), undefined, NOW), origin).toBe(true);
+    }
+  });
+
+  it('перенесённая из старого приложения не новая, даже если перенос был только что', () => {
+    expect(isNew(book('moved', { origin: 'migration', addedAt: NOW - HOUR }), undefined, NOW)).toBe(false);
+  });
+
+  it('восстановленная из копии не новая, даже если восстановление было только что', () => {
+    expect(isNew(book('restored', { origin: 'backup', addedAt: NOW - HOUR }), undefined, NOW)).toBe(false);
+  });
 });
 
 describe('производительность', () => {

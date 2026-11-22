@@ -112,7 +112,11 @@ export function readingNow(books: BookMeta[], progress: Map<string, Progress>, l
   return startedBooks(books, progress).slice(1, 1 + limit);
 }
 
-/** Метка «Новая»: добавлена за последние 3 суток и ещё не открыта. */
+/**
+ * Метка «Новая»: книгу только что добавили и ещё не открывали (добавлена за последние 3 суток, прогресса нет).
+ * Книги, перенесённые из старого приложения или восстановленные из копии, не «новые»: их не добавляли заново.
+ */
 export function isNew(book: BookMeta, progress: Progress | undefined, now: number): boolean {
+  if (book.origin === 'migration' || book.origin === 'backup') return false;
   return !progress && now - book.addedAt <= NEW_BOOK_MS;
 }

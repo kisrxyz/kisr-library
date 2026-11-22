@@ -47,8 +47,13 @@ interface Option {
 
 const STEP: Record<string, number> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
 
-/** Вертикальный список вариантов с одним выбранным: радиогруппа со стрелками, строка ≥ 48px. */
-function OptionList({
+/**
+ * Вертикальный список вариантов с одним выбранным: радиогруппа, строка ≥ 48px.
+ * Стрелки, Home и End только двигают фокус (в списке один пункт доступен по Tab, как в radiogroup);
+ * выбирают Enter, пробел и нажатие — иначе в шторке разделов первая же стрелка выбрала бы раздел
+ * и закрыла шторку, и по списку нельзя было бы ходить с клавиатуры или экранным диктором.
+ */
+export function OptionList({
   options,
   value,
   onChange,
@@ -63,6 +68,10 @@ function OptionList({
     0,
     options.findIndex((o) => o.value === value),
   );
+  // Пункт с фокусом доступен по Tab; пока фокуса в списке не было — выбранный
+  const [focused, setFocused] = useState<number | null>(null);
+  const tabbable = Math.min(focused ?? selected, options.length - 1);
+
   return (
     <div class="optlist" role="radiogroup" aria-label={label}>
       {options.map((o, i) => (
@@ -72,18 +81,17 @@ function OptionList({
           class="optlist__item"
           role="radio"
           aria-checked={o.value === value}
-          tabIndex={i === selected ? 0 : -1}
+          tabIndex={i === tabbable ? 0 : -1}
+          onFocus={() => setFocused(i)}
           onClick={() => onChange(o.value)}
           onKeyDown={(e) => {
-            const group = e.currentTarget.parentElement;
             let to = -1;
             if (e.key in STEP) to = (i + STEP[e.key] + options.length) % options.length;
             else if (e.key === 'Home') to = 0;
             else if (e.key === 'End') to = options.length - 1;
             if (to < 0) return;
             e.preventDefault();
-            onChange(options[to].value);
-            (group?.children[to] as HTMLElement | undefined)?.focus();
+            (e.currentTarget.parentElement?.children[to] as HTMLElement | undefined)?.focus();
           }}
         >
           <span>{o.label}</span>
