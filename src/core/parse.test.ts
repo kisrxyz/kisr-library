@@ -137,6 +137,58 @@ describe('parseBook: мусор вокруг шапки', () => {
   });
 });
 
+describe('parseBook: обёртки разной формы', () => {
+  const cards = '```cards\nQ: а\nA: б\n```';
+  const innerFences = (md: string) => md.match(/^`{3,}.*$/gm) ?? [];
+
+  it('обёртка из четырёх ` с блоком ```cards внутри и вопросом после', () => {
+    const raw = `Вот разбор:\n\n\`\`\`\`markdown\n---\ntitle: Т\n---\n## Глава\nтекст\n${cards}\n\`\`\`\`\nХочешь, сделаю продолжение?`;
+    const b = parseBook(raw);
+    expect(b.title).toBe('Т');
+    expect(b.chapters.map((c) => c.title)).toEqual(['Глава']);
+    const md = b.chapters[0].md;
+    expect(innerFences(md)).toEqual(['```cards', '```']);
+    expect(md).toContain('Q: а\nA: б');
+    expect(md.endsWith('Хочешь, сделаю продолжение?')).toBe(true);
+    expect(md).not.toContain('````');
+  });
+  it('пустая строка между открывашкой и шапкой', () => {
+    const raw = '```markdown\n\n---\ntitle: Т\n---\n## Глава\nтекст\n```\nХочешь?';
+    const b = parseBook(raw);
+    expect(b.title).toBe('Т');
+    expect(innerFences(b.chapters[0].md)).toEqual([]);
+    expect(b.chapters[0].md.endsWith('Хочешь?')).toBe(true);
+  });
+  it('обёртка ~~~markdown', () => {
+    const raw = `Держи:\n~~~markdown\n---\ntitle: Т\n---\n## Глава\nтекст\n${cards}\n~~~\n`;
+    const b = parseBook(raw);
+    expect(b.title).toBe('Т');
+    expect(b.chapters[0].md).not.toContain('~~~');
+    expect(innerFences(b.chapters[0].md)).toEqual(['```cards', '```']);
+  });
+  it('вся книга в обёртке из четырёх ` без шапки и без вступительной фразы', () => {
+    const b = parseBook(`\`\`\`\`markdown\n## Глава\nтекст\n${cards}\n\`\`\`\``);
+    expect(b.chapters.map((c) => c.title)).toEqual(['Глава']);
+    expect(innerFences(b.chapters[0].md)).toEqual(['```cards', '```']);
+  });
+  it('вся книга в обёртке, закрывашка с хвостом и пустой строкой', () => {
+    const b = parseBook('```markdown\n\n---\ntitle: Т\n---\n## Глава\nтекст\n```\n\nХочешь?\n');
+    expect(b.title).toBe('Т');
+    expect(b.chapters[0].md).toBe('текст\n\n\nХочешь?');
+  });
+  it('незакрытая обёртка: открывашка снимается, блок ```cards цел', () => {
+    const b = parseBook(`Держи:\n\`\`\`markdown\n---\ntitle: Т\n---\n## Глава\n${cards}`);
+    expect(b.title).toBe('Т');
+    expect(innerFences(b.chapters[0].md)).toEqual(['```cards', '```']);
+  });
+  it('пример книги в блоке ```markdown внутри главы не трогаем', () => {
+    const raw = '---\ntitle: Т\n---\n## Пример\nВот шаблон:\n```markdown\n---\ntitle: Образец\n---\nтекст\n```\nВсё.';
+    const b = parseBook(raw);
+    expect(b.title).toBe('Т');
+    expect(b.chapters[0].md).toContain('```markdown\n---\ntitle: Образец\n---\nтекст\n```');
+  });
+});
+
 describe('parseBook: заголовки', () => {
   it('переводит английские', () => {
     const raw = `---\ntitle: Т\n---\n## TL;DR\n${words(50)}\n\n## Sources\nx\n\n## Key findings\n${words(50)}`;
@@ -255,6 +307,53 @@ describe('splitBooks', () => {
     expect(splitBooks(fixture('no-header.md'))).toHaveLength(1);
     expect(splitBooks('  \n ')).toHaveLength(0);
   });
+  describe('каждая книга в своём заборе', () => {
+    const cards = '```cards\nQ: а\nA: б\n```';
+    const fences = (md: string) => md.match(/^`{3,}.*$/gm) ?? [];
+    const check = (parts: string[], titlesExpected: string[]) => {
+      expect(parts).toHaveLength(titlesExpected.length);
+      parts.forEach((p, i) => {
+        const b = parseBook(p);
+        expect(b.title).toBe(titlesExpected[i]);
+        // кроме настоящих блоков ```cards ни одного забора в тексте глав
+        for (const c of b.chapters) expect(fences(c.md)).toEqual(fences(c.md).length ? ['```cards', '```'] : []);
+      });
+    };
+
+    it('три ` у обеих, у каждой блок ```cards, между ними болтовня', () => {
+      const raw =
+        `Первая часть:\n\n\`\`\`markdown\n---\ntitle: А\n---\n## Г\nтекст а\n${cards}\n\`\`\`\n\n` +
+        `А вот вторая:\n\n\`\`\`markdown\n---\ntitle: Б\npart: 2/2\n---\n## Г\nтекст б\n${cards}\n\`\`\`\n`;
+      const parts = splitBooks(raw);
+      check(parts, ['А', 'Б']);
+      expect(parseBook(parts[1]).part).toEqual({ n: 2, of: 2 });
+    });
+    it('четыре ` у обеих и пустая строка после открывашки', () => {
+      const raw =
+        `\`\`\`\`markdown\n\n---\ntitle: А\n---\n## Г\nтекст а\n${cards}\n\`\`\`\`\n\n` +
+        `\`\`\`\`markdown\n---\ntitle: Б\n---\n## Г\nтекст б\n${cards}\n\`\`\`\`\nХочешь третью?`;
+      const parts = splitBooks(raw);
+      check(parts, ['А', 'Б']);
+      expect(parseBook(parts[1]).chapters[0].md.endsWith('Хочешь третью?')).toBe(true);
+    });
+    it('первая в заборе, вторая без забора, у второй блок ```cards', () => {
+      const raw = `\`\`\`markdown\n---\ntitle: А\n---\n## Г\nтекст а\n\`\`\`\n\n---\ntitle: Б\n---\n## Г\nтекст б\n${cards}\n`;
+      check(splitBooks(raw), ['А', 'Б']);
+    });
+    it('первая без забора, вторая в заборе', () => {
+      const raw = `---\ntitle: А\n---\n## Г\nтекст а\n${cards}\n\n\`\`\`markdown\n---\ntitle: Б\n---\n## Г\nтекст б\n\`\`\`\n`;
+      check(splitBooks(raw), ['А', 'Б']);
+    });
+    it('первую не закрыли, вторая в заборе', () => {
+      const raw = `\`\`\`markdown\n---\ntitle: А\n---\n## Г\nтекст а\n\n\`\`\`markdown\n---\ntitle: Б\n---\n## Г\nтекст б\n\`\`\`\n`;
+      check(splitBooks(raw), ['А', 'Б']);
+    });
+    it('одна обёртка вокруг двух книг (четыре `)', () => {
+      const raw = `\`\`\`\`markdown\n---\ntitle: А\n---\n## Г\nтекст а\n${cards}\n\n---\ntitle: Б\n---\n## Г\nтекст б\n${cards}\n\`\`\`\`\n`;
+      check(splitBooks(raw), ['А', 'Б']);
+    });
+  });
+
   it('две книги в одной обёртке ```markdown', () => {
     const raw = 'Держи:\n```markdown\n---\ntitle: А\n---\n## Г\nтекст а\n\n---\ntitle: Б\n---\n## Г\nтекст б\n```\n';
     const parts = splitBooks(raw);

@@ -39,31 +39,121 @@ function str(v: FrontValue | undefined): string {
   return (Array.isArray(v) ? v.join(', ') : String(v)).trim();
 }
 
-/** Весь текст в обёртке ```markdown … ``` → внутренность. */
+interface Fence {
+  ch: string;
+  len: number;
+  info: string;
+}
+
+/** Строка-забор Markdown: три и больше ` или ~, затем необязательное слово (язык). */
+function fenceOf(line: string): Fence | null {
+  const m = line.match(/^[ \t]{0,3}(`{3,}|~{3,})[ \t]*(.*?)[ \t]*$/);
+  return m ? { ch: m[1][0], len: m[1].length, info: m[2] } : null;
+}
+
+/** Обёртка всей книги: забор без языка или с `markdown` / `md`. */
+const isWrapperFence = (f: Fence | null): f is Fence => !!f && /^(markdown|md)?$/i.test(f.info);
+
+/** Строка k — начало шапки: `---`, а под ней `title:`. */
+function isHeaderAt(lines: string[], k: number): boolean {
+  return /^---[ \t]*$/.test(lines[k]) && /^[ \t]*title[ \t]*:/i.test(lines[k + 1] ?? '');
+}
+
+/** Индекс шапки, которая идёт сразу после строки i (пустые строки между ними прощаем), иначе -1. */
+function headerAfter(lines: string[], i: number): number {
+  let j = i + 1;
+  while (j < lines.length && lines[j].trim() === '') j++;
+  return j < lines.length && isHeaderAt(lines, j) ? j : -1;
+}
+
+/**
+ * Снимает обёртку ```markdown (или ````markdown, ~~~) вокруг книги: открывашку над шапкой и закрывашку.
+ * Остальное остаётся: в обёртке могут быть блоки ```cards, а после неё — фраза вроде
+ * «Хочешь, сделаю продолжение?».
+ *
+ * Идёт по строкам как Markdown-разборщик: помнит, внутри обёртки ли он и внутри ли вложенного блока.
+ * Открывашка — забор без языка (или `markdown`/`md`), за которым сразу шапка. Закрывашка — первый
+ * забор без языка, не закрывающий вложенный блок и не короче открывашки (так находятся и ```, и ````).
+ * Если обёртку не закрыли и дальше открылась новая, прежняя просто снимается.
+ *
+ * `all = false`: только обёртка первой шапки (вставка одной книги, шапка в первых 600 символах).
+ * `all = true`: обёртки у всех шапок (несколько книг в одной вставке, в общем или в разных заборах).
+ */
+function unwrapFences(s: string, all: boolean): string {
+  const lines = s.split('\n');
+  if (!all && /^---[ \t]*$/.test(lines[0])) return s; // книга начинается с шапки: обёртки нет
+  const offsets: number[] = [];
+  let sum = 0;
+  for (const line of lines) {
+    offsets.push(sum);
+    sum += line.length + 1;
+  }
+
+  const drop: number[] = [];
+  let wrapper: Fence | null = null;
+  let inner: Fence | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (!all && !wrapper && isHeaderAt(lines, i)) break; // первая шапка без обёртки
+    const f = fenceOf(lines[i]);
+    if (!f) continue;
+    if (inner) {
+      if (f.ch === inner.ch && f.info === '' && f.len >= inner.len) inner = null;
+      continue;
+    }
+    if (wrapper && f.ch === wrapper.ch && f.info === '' && f.len >= wrapper.len) {
+      drop.push(i);
+      wrapper = null;
+      if (!all) break;
+      continue;
+    }
+    const h = isWrapperFence(f) ? headerAfter(lines, i) : -1;
+    if (h >= 0) {
+      if (!all && offsets[h] > PREAMBLE_LIMIT) return s; // шапка слишком далеко: это не вставка с обёрткой
+      drop.push(i);
+      wrapper = f;
+    } else {
+      inner = f; // обычный блок кода (```cards и т. п.)
+    }
+  }
+  for (const i of drop) lines[i] = '';
+  return lines.join('\n');
+}
+
+/** Весь текст в обёртке ```markdown … ``` → внутренность (забор любой длины, ` или ~). */
 function cleanModelMd(t: string): string {
   let s = String(t || '').trim();
-  const f = s.match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/);
-  if (f) s = f[1].trim();
+  const lines = s.split('\n');
+  const open = fenceOf(lines[0]);
+  const close = fenceOf(lines[lines.length - 1]);
+  const wrapped =
+    lines.length >= 3 &&
+    isWrapperFence(open) &&
+    close !== null &&
+    close.ch === open.ch &&
+    close.info === '' &&
+    close.len >= open.len;
+  if (wrapped && !closedBeforeNextBook(lines, open)) s = lines.slice(1, -1).join('\n').trim();
   return s;
 }
 
 /**
- * Если обёртка ```markdown открылась до шапки, а закрывающую за текстом никто не снял
- * (после неё может быть болтовня вроде «Хочешь, сделаю продолжение?»), убираем эту строку ```.
- * Признак закрывающей: нечётное число строк-заборов и последняя из них пустая (без языка).
+ * Обёртку, открытую в первой строке, закрыли раньше конца текста, а после неё начинается ещё одна
+ * книга (шапка): значит, последний забор текста принадлежит уже ей, а не первой обёртке.
  */
-function dropWrapperClose(s: string): string {
-  const lines = s.split('\n');
-  let count = 0;
-  let last = -1;
-  lines.forEach((line, i) => {
-    if (/^[ \t]{0,3}```/.test(line)) {
-      count++;
-      last = i;
+function closedBeforeNextBook(lines: string[], opener: Fence): boolean {
+  let inner: Fence | null = null;
+  for (let i = 1; i < lines.length - 1; i++) {
+    const f = fenceOf(lines[i]);
+    if (!f) continue;
+    if (inner) {
+      if (f.ch === inner.ch && f.info === '' && f.len >= inner.len) inner = null;
+    } else if (f.ch === opener.ch && f.info === '' && f.len >= opener.len) {
+      return lines.slice(i + 1).some((_, j) => isHeaderAt(lines, i + 1 + j));
+    } else {
+      inner = f;
     }
-  });
-  if (count % 2 === 1 && /^[ \t]{0,3}```[ \t]*$/.test(lines[last])) lines[last] = '';
-  return lines.join('\n');
+  }
+  return false;
 }
 
 /** Отбрасывает всё до шапки, если шапка начинается в первых 600 символах (spec §7.1). */
@@ -71,17 +161,14 @@ function stripPreamble(s: string): string {
   if (/^---[ \t]*(\n|$)/.test(s)) return s;
   const m = HEADER_START.exec(s);
   if (!m || m.index > PREAMBLE_LIMIT) return s;
-  const before = s.slice(0, m.index);
-  let rest = s.slice(m.index);
-  if (/(^|\n)[ \t]*```(?:markdown|md)?[ \t]*\n$/.test(before)) rest = dropWrapperClose(rest);
-  return rest.trim();
+  return s.slice(m.index).trim();
 }
 
 /** BOM, \r, обёртка ```markdown, мусор до шапки. */
-function prepare(raw: string): string {
+function prepare(raw: string, all = false): string {
   let s = cleanModelMd(String(raw || '').replace(/\r/g, ''));
   if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
-  return stripPreamble(s);
+  return stripPreamble(unwrapFences(s, all));
 }
 
 export function parseFront(md: string): { meta: Record<string, FrontValue>; body: string } {
@@ -317,7 +404,7 @@ export function parseBook(raw: string, opts: { fileName?: string } = {}): Parsed
 
 /** Несколько книг в одной вставке: новая книга начинается с `---` + `title:` в начале строки. */
 export function splitBooks(raw: string): string[] {
-  const s = prepare(raw);
+  const s = prepare(raw, true);
   if (!s) return [];
   const starts: number[] = [];
   const re = new RegExp(HEADER_START.source, 'gim');
