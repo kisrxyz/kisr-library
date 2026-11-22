@@ -1,0 +1,65 @@
+/* «Как это работает» */
+.how {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.how__summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 44px 0 16px;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+
+.how__summary::-webkit-details-marker {
+  display: none;
+}
+
+.how__summary::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 150ms var(--ease-out);
+}
+
+.how[open] .how__summary::after {
+  transform: translateY(-30%) rotate(-135deg);
+}
+
+.how__body {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.how__steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+  font-size: var(--size-small);
+  line-height: 1.5;
+}
+
+.how__steps li::marker {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.how__more {
+  color: var(--muted);
+  font-size: var(--size-small);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
