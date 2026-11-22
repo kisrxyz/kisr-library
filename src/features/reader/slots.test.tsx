@@ -217,6 +217,98 @@ describe('BlockActions: выбор абзаца', () => {
   });
 });
 
+/*
+  iOS Safari не создаёт `click` для неинтерактивного элемента, если единственный слушатель висит на `document`/`body`:
+  выбор абзаца и закрытие панели должны держаться на слушателях ниже `body` — на `root` и на области экрана (`<main>`).
+  Предок, который гасит всплытие, имитирует «выше слушателей нет».
+*/
+describe('BlockActions: слушатели нажатия не на document', () => {
+  const stopAbove = (el: HTMLElement): HTMLElement => {
+    const wrap = document.createElement('div');
+    wrap.addEventListener('click', (e) => e.stopPropagation());
+    el.replaceWith(wrap);
+    wrap.append(el);
+    return wrap;
+  };
+
+  it('вешает слушатель `click` на сам root и снимает его при уходе', async () => {
+    const add = vi.spyOn(prose, 'addEventListener');
+    const remove = vi.spyOn(prose, 'removeEventListener');
+    mountActions();
+    await flush();
+    expect(add.mock.calls.filter(([type]) => type === 'click')).toHaveLength(1);
+    expect(remove.mock.calls.filter(([type]) => type === 'click')).toHaveLength(0);
+    act(() => render(null, host));
+    expect(remove.mock.calls.filter(([type]) => type === 'click')).toHaveLength(1);
+    expect(remove.mock.calls.find(([type]) => type === 'click')![1]).toBe(add.mock.calls.find(([type]) => type === 'click')![1]);
+  });
+
+  it('абзац выбирается, даже если до document нажатие не доходит', async () => {
+    stopAbove(prose);
+    mountActions();
+    await flush();
+    tap(block('pa1'));
+    expect(block('pa1').classList.contains('sel')).toBe(true);
+    expect(bar()).not.toBeNull();
+    tap(block('pb2'));
+    expect(block('pb2').classList.contains('sel')).toBe(true);
+    expect(block('pa1').classList.contains('sel')).toBe(false);
+  });
+
+  it('нажатие на пустое место внутри root закрывает панель без document', async () => {
+    stopAbove(prose);
+    mountActions();
+    await flush();
+    tap(block('pa1'));
+    expect(bar()).not.toBeNull();
+    tap(prose.querySelector('p:last-child')!); // абзац без ключа
+    expect(bar()).toBeNull();
+    expect(prose.querySelector('.sel')).toBeNull();
+  });
+
+  it('нажатие на поле экрана (вне root, внутри <main>) закрывает панель без document', async () => {
+    const main = document.createElement('main');
+    const gap = document.createElement('p');
+    gap.textContent = 'Конец главы';
+    prose.replaceWith(main);
+    main.append(prose, gap);
+    stopAbove(main);
+    mountActions();
+    await flush();
+    tap(block('pa1'));
+    expect(bar()).not.toBeNull();
+    tap(gap);
+    expect(bar()).toBeNull();
+    expect(prose.querySelector('.sel')).toBeNull();
+  });
+
+  it('нажатия на панели и в шторке заметки панель не закрывают', async () => {
+    mountActions();
+    await flush();
+    tap(block('pa1'));
+    tap(document.querySelector('.bact')!);
+    expect(bar()).not.toBeNull();
+    tap(barButton('Заметка'));
+    tap(document.querySelector('dialog.sheet')!);
+    expect(block('pa1').classList.contains('sel')).toBe(true);
+  });
+
+  it('другой root — слушатель переезжает: старый абзац больше не отзывается', async () => {
+    const next = document.createElement('div');
+    next.className = 'prose';
+    next.innerHTML = BODY;
+    document.body.append(next);
+    mountActions(1);
+    await flush();
+    act(() => render(<BlockActionsSlot bookId="kniga" chapter={2} root={next} version={2} />, host));
+    tap(block('pa1'));
+    expect(bar()).toBeNull();
+    tap(next.querySelector('[data-key="pa1"]')!);
+    expect(bar()).not.toBeNull();
+    next.remove();
+  });
+});
+
 describe('BlockActions: отметка', () => {
   it('«Отметить» красит абзац, пишет в базу и работает как переключатель', async () => {
     mountActions();

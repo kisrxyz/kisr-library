@@ -79,19 +79,45 @@ export function BlockActions({ bookId, chapter, root, version }: BlockActionsPro
     return () => sel?.classList.remove('sel');
   }, [sel]);
 
-  // Нажатие на блок выделяет его; нажатие в любом другом месте снимает выделение
+  /*
+    Нажатие на блок выделяет его — слушатель на самом `root`, а не на `document`. iOS Safari не создаёт `click`
+    для неинтерактивного элемента (`<p>`, `<li>`), если единственный слушатель висит на `document` или `body`;
+    слушатель на предке ниже `body` делает нажимаемыми и потомков.
+  */
   useEffect(() => {
     if (!root) return;
-    const onClick = (e: MouseEvent) => {
+    const onTap = (e: MouseEvent) => {
       if (noteOpenRef.current) return;
-      if (e.target instanceof Element && e.target.closest('.bact')) return;
       tapY.current = window.scrollY;
       const block = blockAt(root, e.target);
       if (block && selectingText()) return;
       setSel((now) => (block && block !== now ? block : null));
     };
-    document.addEventListener('click', onClick);
-    return () => document.removeEventListener('click', onClick);
+    root.addEventListener('click', onTap);
+    return () => root.removeEventListener('click', onTap);
+  }, [root]);
+
+  /*
+    Нажатие вне главы (поля экрана, конец главы, пустое место) снимает выделение. Слушатель — на области экрана
+    (`<main>`), по той же причине: на пустом месте под `document` iOS нажатия не отдаёт. `document` — запасной:
+    его хватает на ПК и на нажатиях по интерактивным элементам вне `main`. Нажатия внутри `root` обрабатывает
+    слушатель выше; панель и шторка заметки не в счёт.
+  */
+  useEffect(() => {
+    if (!root) return;
+    const area = root.closest('main') ?? root.parentElement;
+    const onAway = (e: MouseEvent) => {
+      if (noteOpenRef.current) return;
+      if (e.target instanceof Element && (root.contains(e.target) || e.target.closest('.bact'))) return;
+      tapY.current = window.scrollY;
+      setSel(null);
+    };
+    area?.addEventListener('click', onAway);
+    document.addEventListener('click', onAway);
+    return () => {
+      area?.removeEventListener('click', onAway);
+      document.removeEventListener('click', onAway);
+    };
   }, [root]);
 
   // Прокрутка и Esc закрывают панель
