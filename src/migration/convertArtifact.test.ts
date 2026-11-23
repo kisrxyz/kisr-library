@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -336,15 +336,19 @@ describe('convertOld (граничные случаи)', () => {
 describe.skipIf(!existsSync(join(REPO, 'kisr-library', 'data', 'library.json')))('convertOld (реальная выгрузка)', () => {
   let backup: BackupFile;
   let summary: MigrationSummary;
+  // Сколько книг в выгрузке: владелец дописывает в неё новые разборы, поэтому число не зашито.
+  let total: number;
 
   beforeAll(() => {
+    total = (JSON.parse(readFileSync(join(REPO, 'kisr-library', 'data', 'library.json'), 'utf8')) as unknown[]).length;
     ({ backup, summary } = convertOld(readOldSources(REPO), NOW));
   });
 
-  it('23 книги и прогресс не меньше шести', () => {
-    expect(summary.books).toBe(23);
+  it('все книги выгрузки (не меньше 23) и прогресс не меньше шести', () => {
+    expect(total).toBeGreaterThanOrEqual(23);
+    expect(summary.books).toBe(total);
     expect(summary.progress).toBeGreaterThanOrEqual(6);
-    expect(backup.books).toHaveLength(23);
+    expect(backup.books).toHaveLength(total);
     expect(summary.chapters).toBe(backup.books.reduce((n, b) => n + b.chapters.length, 0));
   });
 
@@ -363,11 +367,11 @@ describe.skipIf(!existsSync(join(REPO, 'kisr-library', 'data', 'library.json')))
     expect(backup.progress.find((x) => x.bookId === 'vstuplenie-mwkhjndt')!.chapter).toBe(5);
   });
 
-  it('файл восстанавливается: planMerge в пустую библиотеку добавляет 23 книги', () => {
+  it('файл восстанавливается: planMerge в пустую библиотеку добавляет все книги', () => {
     const file = JSON.parse(JSON.stringify(backup));
     expect(isBackup(file)).toBe(true);
     const plan = planMerge(EMPTY, file);
-    expect(plan.report.added).toBe(23);
+    expect(plan.report.added).toBe(total);
     expect(plan.putProgress.length).toBe(summary.progress);
   });
 });
