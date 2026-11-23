@@ -163,9 +163,9 @@ export function BlockActions({ bookId, chapter, root, version }: BlockActionsPro
     if (!sel) return;
     const text = ownText(sel);
     setSel(null);
-    // Нет API буфера (старый браузер, страница не по https): не падаем, а говорим
+    // Нет API буфера (старый браузер, страница не по https): не падаем, а говорим то же, что при отказе
     if (!navigator.clipboard?.writeText) {
-      toast('Не получилось скопировать');
+      toast('Не удалось скопировать');
       return;
     }
     // Запрос к буферу — сразу в обработчике нажатия: iOS другой не пускает

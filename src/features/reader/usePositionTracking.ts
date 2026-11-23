@@ -4,6 +4,8 @@
  * после остановки), при сворачивании (`visibilitychange: hidden`), на `pagehide` и при уходе из главы.
  * Переход по ссылке (заметка, поиск, «Продолжить», блок внутри главы) место не пишет, пока читатель сам
  * не прокрутит: заглянуть в заметку — не значит потерять место, где остановился.
+ * Прокрутку, пока страницу держит шторка, и сразу после неё (`pageScrollHeld`) делает браузер, а не читатель:
+ * её хук не замечает — ни место, ни конец подглядывания.
  * Копит активное время чтения: пока вкладка видна и прокрутка была в последние 60 с.
  * Если текст перестроился (размер шрифта в «Aa», поворот экрана, догрузка шрифта), тот же блок
  * возвращается на линию чтения — позиция держится за абзац, а не за пиксели.
@@ -14,6 +16,7 @@ import type { BookMeta, Progress, Settings } from '../../core/types';
 import { ownText, type EnhanceResult } from '../../markdown/enhance';
 import { books, progressMap, saveProgress } from '../../state/library';
 import { settings } from '../../state/settings';
+import { pageScrollHeld } from '../../ui/Sheet';
 import { anchorScrollY, chapterWordsAt, findAnchor, LINE_GAP, progressAt, type Anchor, type Rect } from './position';
 import { isProgrammaticScroll, scrollWindowTo } from './useAutoHide';
 
@@ -23,6 +26,8 @@ export const SAVE_THROTTLE_MS = 300;
 const ACTIVE_WINDOW_MS = 60_000;
 /** Чтобы восстановленный блок не ушёл за экран, таблица над ним «съедает» не больше такой доли экрана. */
 const MAX_GAP_SHARE = 0.6;
+/** Подглядывание кончается, когда читатель сам увёл страницу дальше стольких пикселей от места перехода. */
+export const PEEK_SLOP_PX = 8;
 
 export interface PositionTrackingOptions {
   book: BookMeta;
@@ -41,6 +46,8 @@ export interface PositionTrackingOptions {
    * («Продолжить») остаётся прежним.
    */
   peek: boolean;
+  /** Подглядывание кончилось: читатель сам повёл страницу (не шторка, не браузер, не приложение). */
+  onPeekEnd?: () => void;
   /** Линия чтения в координатах окна: низ панели плюс зазор. */
   lineY: () => number;
   /** Конец главы уже в кадре или выше: глава прочитана целиком. */
@@ -51,10 +58,10 @@ export interface PositionTrackingOptions {
 
 export interface PositionTracker {
   /**
-   * Переход к блоку внутри открытой главы (оглавление, заметка). Вызывать до прокрутки к цели: место,
-   * где читатель был, дописывается сейчас, а цель перехода пишется, только когда он сам прокрутит.
+   * Переход к блоку внутри открытой главы (оглавление, заметка); `go` встаёт на цель. Место, где читатель
+   * был, дописывается до перехода, а цель пишется, только когда он сам прокрутит (как при подглядывании).
    */
-  jump(): void;
+  jump(go: () => void): void;
   /** Записать место и больше не писать: читатель уходит в другую главу. */
   close(): void;
 }
@@ -98,7 +105,7 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
   optsRef.current = opts;
   const api = useRef<PositionTracker | null>(null);
   const tracker = useRef<PositionTracker>({
-    jump: () => api.current?.jump(),
+    jump: (go) => (api.current ? api.current.jump(go) : go()),
     close: () => api.current?.close(),
   });
 
@@ -112,6 +119,8 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     let moved = optsRef.current.saveOnReady;
     /** Читатель только заглянул по ссылке и сам ещё не прокручивал: не писать ничего (см. `peek`). */
     let peek = optsRef.current.peek;
+    /** Где стоит страница, на которую заглянули: подглядывание кончается, когда читатель увёл её отсюда. */
+    let peekAt = window.scrollY;
     let latest: Anchor = { index: 0, offset: 0 };
     /** Слова главы до `latest` — считаются при замере, запись раскладку не трогает. */
     let latestWords = 0;
@@ -154,7 +163,7 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     const write = () => {
       clearTimeout(timer);
       timer = undefined;
-      if (closed || (peek && !moved)) return;
+      if (closed || peek) return;
       const now = performance.now();
       account(now);
       lastWrite = now;
@@ -207,12 +216,23 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
 
     const onScroll = () => {
       if (detached()) return;
-      if (!isProgrammaticScroll()) {
+      // Прокрутку держит шторка или отпустила только что: так страницу двигает браузер (клавиатура над полем
+      // заметки, вернувшаяся полоса прокрутки, привязка прокрутки), а не читатель. Место не меряем и не пишем
+      if (pageScrollHeld()) return;
+      if (isProgrammaticScroll()) {
+        // Своя прокрутка приложения (переход, блок вернулся на линию) переносит и место подглядывания
+        if (peek) peekAt = window.scrollY;
+      } else if (!peek || Math.abs(window.scrollY - peekAt) > PEEK_SLOP_PX) {
         const now = performance.now();
         account(now);
         lastActive = now;
         lastUserScroll = now;
         moved = true;
+        if (peek) {
+          // Читатель сам повёл страницу: теперь он здесь читает, и место пишется как обычно
+          peek = false;
+          optsRef.current.onPeekEnd?.();
+        }
       }
       if (!frame) frame = requestAnimationFrame(onFrame);
     };
@@ -269,11 +289,13 @@ export function usePositionTracking(opts: PositionTrackingOptions): PositionTrac
     document.fonts?.addEventListener?.('loadingdone', onFonts);
 
     api.current = {
-      jump() {
+      jump(go) {
         // Место до перехода (последний замер) ещё ждёт отложенной записи — дописываем его сейчас
         if (timer !== undefined) write();
         moved = false;
         peek = true;
+        go();
+        peekAt = window.scrollY;
       },
       close() {
         measure();

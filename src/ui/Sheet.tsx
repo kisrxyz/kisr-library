@@ -17,11 +17,36 @@ export const EXIT_MS = 200;
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 
+/**
+ * Сколько после закрытия шторки прокрутка страницы ещё считается сделанной браузером, а не читателем:
+ * вернулась полоса прокрутки и браузер подвинул страницу (привязка прокрутки), на iPhone убралась клавиатура.
+ */
+export const SCROLL_SETTLE_MS = 700;
+
 let scrollLocks = 0;
+/** Когда шторка последней отпустила прокрутку страницы (`performance.now()`). */
+let releasedAt = Number.NEGATIVE_INFINITY;
 
 function lockPageScroll(lock: boolean): void {
   scrollLocks = Math.max(0, scrollLocks + (lock ? 1 : -1));
   document.documentElement.classList.toggle('is-scroll-locked', scrollLocks > 0);
+  if (!lock && scrollLocks === 0) releasedAt = performance.now();
+}
+
+/**
+ * Прокрутку страницы держит шторка (`html.is-scroll-locked`) или отпустила только что (`SCROLL_SETTLE_MS`):
+ * так страницу двигает браузер — клавиатура над полем заметки, вернувшаяся полоса прокрутки, — а не читатель.
+ */
+export function pageScrollHeld(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.documentElement.classList.contains('is-scroll-locked') || performance.now() - releasedAt < SCROLL_SETTLE_MS;
+}
+
+/** Только для тестов: шторка прошлого теста больше не держит прокрутку. */
+export function __resetPageScrollForTests(): void {
+  scrollLocks = 0;
+  releasedAt = Number.NEGATIVE_INFINITY;
+  document.documentElement.classList.remove('is-scroll-locked');
 }
 
 function prefersReducedMotion(): boolean {

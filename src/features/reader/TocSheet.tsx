@@ -60,6 +60,9 @@ function TocBody({ book, progress, chapter, onClose }: Omit<TocSheetProps, 'open
 
   const open = (to: number, block?: string) => {
     onClose();
+    // Открытая глава без блока: переходить некуда. Адрес не трогаем — в нём может быть переход по ссылке,
+    // по которому перезагрузка снова откроет то же место, ничего не записав
+    if (to === chapter && !block) return;
     navigate({ name: 'read', id: book.id, chapter: to, block }, { replace: true });
   };
 

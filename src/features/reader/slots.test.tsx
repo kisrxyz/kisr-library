@@ -551,13 +551,13 @@ describe('BlockActions: копирование', () => {
     await until(() => expect(toasts.value.map((t) => t.text)).toContain('Не удалось скопировать'));
   });
 
-  it('буфера нет совсем (navigator.clipboard нет) — «Не получилось скопировать», панель закрыта', async () => {
+  it('буфера нет совсем (navigator.clipboard нет) — тот же тост «Не удалось скопировать», панель закрыта', async () => {
     expect((navigator as { clipboard?: unknown }).clipboard).toBeUndefined();
     mountActions();
     await flush();
     tap(block('pa1'));
     tap(barButton('Копировать'));
-    await until(() => expect(toasts.value.map((t) => t.text)).toContain('Не получилось скопировать'));
+    await until(() => expect(toasts.value.map((t) => t.text)).toContain('Не удалось скопировать'));
     expect(bar()).toBeNull();
   });
 });
@@ -580,6 +580,16 @@ describe('TocSlot: оглавление', () => {
     tap(rows[1]);
     expect(onClose).toHaveBeenCalled();
     expect(route.value).toMatchObject({ name: 'read', id: 'kniga', chapter: 2 });
+  });
+
+  it('«Главы»: нажатие на открытую главу только закрывает шторку, адрес (и переход по ссылке в нём) не трогает', () => {
+    location.hash = '#/read/kniga/1?b=pa1';
+    const before = route.value;
+    const onClose = mountToc({ chapter: 1 });
+    tap([...sheet().querySelectorAll<HTMLElement>('.chapters__row')][0]);
+    expect(onClose).toHaveBeenCalled();
+    expect(location.hash).toBe('#/read/kniga/1?b=pa1');
+    expect(route.value).toBe(before);
   });
 
   it('«Отметки»: пусто — подсказка', async () => {

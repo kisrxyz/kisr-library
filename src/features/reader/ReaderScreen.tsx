@@ -6,13 +6,14 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { chapterStartWords, lastRequiredChapter, markChapterDone, newProgress, percentOf, remainingWords } from '../../core/progress';
+import { noOrphanDash } from '../../core/text';
 import { minutesLabel } from '../../core/time';
 import type { BookMeta } from '../../core/types';
 import { getChapter } from '../../db/books';
 import { getTasks, setTask } from '../../db/tasks';
 import { enhanceChapter, ownText, type EnhanceResult } from '../../markdown/enhance';
 import { renderMarkdown } from '../../markdown/render';
-import { backTo, navigate, route as currentRoute, toHash, type RouteOf } from '../../router';
+import { backTo, navigate, route as currentRoute, toHash, type Route, type RouteOf } from '../../router';
 import { books, progressMap, saveProgress, setFinished } from '../../state/library';
 import { settings } from '../../state/settings';
 import { Button } from '../../ui/Button';
@@ -71,13 +72,6 @@ function flash(el: HTMLElement): () => void {
   return () => clearTimeout(timer);
 }
 
-/** Адрес главы без `?b=`/`?find=`: после перехода перезагрузка должна вернуть сохранённое место, а не ссылку. */
-function cleanAddress(bookId: string, chapter: number): void {
-  const r = currentRoute.value;
-  if (r.name !== 'read' || r.id !== bookId) return;
-  if (r.chapter !== chapter || r.find || r.block) navigate({ name: 'read', id: bookId, chapter }, { replace: true });
-}
-
 function ChapterView({ book, chapter, route }: ChapterViewProps) {
   const id = book.id;
   const count = book.chapters.length;
@@ -95,6 +89,12 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
   const startRoute = useRef(route);
   /** Глава открыта переходом по ссылке (заметка, поиск, «Продолжить»): место не пишется, пока не прокрутил. */
   const peek = !!(startRoute.current.find || startRoute.current.block);
+  /** Читатель только заглянул (переход по ссылке или к блоку) и сам ещё не прокручивал. */
+  const peeking = useRef(peek);
+  /** Адрес, который глава уже обработала: её открытие, переход к блоку или наша собственная правка адреса. */
+  const handled = useRef<Route>(route);
+  /** Проверить конец главы сейчас: подглядывание кончилось (эффект 4). */
+  const checkEnd = useRef(() => {});
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -126,6 +126,20 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
     setWordsRead(w);
   };
 
+  /**
+   * Адрес главы. Номер — тот, что открыт (ссылка могла указывать за последнюю главу). `?b=`/`?find=` остаются,
+   * пока читатель только заглянул (`keepJump`): перезагрузка или возврат по истории снова откроют это место,
+   * ничего не записав. Их убирает его собственная прокрутка — тогда записанное место уже в этой главе.
+   */
+  const settleAddress = (keepJump: boolean) => {
+    const r = currentRoute.value;
+    if (r.name !== 'read' || r.id !== id) return;
+    const next: Route = keepJump ? { ...r, chapter } : { name: 'read', id, chapter };
+    if (toHash(next) === toHash(r)) return;
+    navigate(next, { replace: true });
+    handled.current = currentRoute.value; // этот адрес поставили мы сами: переходом он не считается
+  };
+
   const tracker = usePositionTracking({
     book,
     chapter,
@@ -134,6 +148,11 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
     ready,
     saveOnReady,
     peek,
+    onPeekEnd: () => {
+      peeking.current = false;
+      settleAddress(false);
+      checkEnd.current();
+    },
     lineY,
     endReached,
     onWords,
@@ -249,7 +268,7 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
           setSaveOnReady(saveOnOpen);
           setPhase('ready');
           if (restored) {
-            cleanAddress(id, chapter);
+            settleAddress(peek);
             // Пришли кнопкой «Дальше» или стрелкой — фокус не теряется, а встаёт на название главы
             if (document.activeElement === document.body || document.activeElement === null) {
               headingRef.current?.focus({ preventScroll: true });
@@ -266,7 +285,8 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
 
   // 3. Переход к блоку внутри открытой главы (оглавление, заметки): `?b=`/`?find=` в адресе
   useEffect(() => {
-    if (!ready || !res || route === startRoute.current || (!route.find && !route.block)) return;
+    if (!ready || !res || route === handled.current || (!route.find && !route.block)) return;
+    handled.current = route;
     const target = restoreTarget({
       keys: res.anchors.map((a) => a.dataset.key ?? ''),
       texts: route.find ? res.anchors.map(ownText) : undefined,
@@ -275,22 +295,28 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
     });
     let unflash = () => {};
     if (target.source !== 'top') {
-      // Заглянул — место, где читал, остаётся записанным; цель перехода пишется, когда прокрутит сам
-      tracker.jump();
-      const lit = place(res.anchors, target, route.find);
-      if (lit) unflash = flash(lit);
+      // Заглянул — место, где читал, остаётся записанным; цель перехода пишется, когда прокрутит сам.
+      // До тех пор переход остаётся и в адресе (`settleAddress`)
+      peeking.current = true;
+      tracker.jump(() => {
+        const lit = place(res.anchors, target, route.find);
+        if (lit) unflash = flash(lit);
+      });
+    } else if (!peeking.current) {
+      settleAddress(false); // блока в главе нет — переходить некуда
     }
-    cleanAddress(id, chapter);
     return unflash;
   }, [ready, route]);
 
-  // 4. Конец главы в кадре — глава дочитана; конец последней обязательной — книга прочитана
+  // 4. Конец главы в кадре — глава дочитана; конец последней обязательной — книга прочитана.
+  //    Пока читатель только заглянул, конец главы не в счёт: когда он сам прокрутит, проверим ещё раз
   useEffect(() => {
     const end = endRef.current;
     if (!ready || !end || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver((entries) => {
-      // Пролистал мимо за один кадр — конец уже выше окна; это тоже «дочитал»
-      if (!entries.some((e) => e.isIntersecting || e.boundingClientRect.bottom < 0)) return;
+    let done = false;
+    const markDone = () => {
+      if (done) return;
+      done = true;
       io.disconnect();
       const b = bookRef.current;
       const now = Date.now();
@@ -306,9 +332,20 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
           UNDO_TOAST_MS,
         );
       }
+    };
+    const io = new IntersectionObserver((entries) => {
+      // Пролистал мимо за один кадр — конец уже выше окна; это тоже «дочитал»
+      if (!entries.some((e) => e.isIntersecting || e.boundingClientRect.bottom < 0)) return;
+      if (!peeking.current) markDone();
     });
     io.observe(end);
-    return () => io.disconnect();
+    checkEnd.current = () => {
+      if (endReached()) markDone();
+    };
+    return () => {
+      io.disconnect();
+      checkEnd.current = () => {};
+    };
   }, [ready]);
 
   const goTo = (to: number) => {
@@ -343,7 +380,7 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
   const left = remainingWords(book, wordsRead);
   const pill = left > 0 ? `${percent}% · ещё ${minutesLabel(left, wpm)}` : `${percent}% · дочитано`;
   // Один экран — одна глава; у книги из одной главы над текстом её название
-  const heading = count === 1 ? book.title : meta.title;
+  const heading = count === 1 ? noOrphanDash(book.title) : meta.title;
   const showFinish = chapter >= lastRequiredChapter(book);
   const shown = phase === 'shown' || phase === 'ready';
 
