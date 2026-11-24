@@ -1,5 +1,6 @@
 /** Хранилище `progress`: одна запись на книгу; нет записи — книга не начата. */
 import type { Progress } from '../core/types';
+import { notifyLocalChange } from './changes';
 import { openDb } from './schema';
 
 export async function getAllProgress(): Promise<Progress[]> {
@@ -8,6 +9,7 @@ export async function getAllProgress(): Promise<Progress[]> {
 
 export async function putProgress(p: Progress): Promise<void> {
   await (await openDb()).put('progress', p);
+  notifyLocalChange('progress');
 }
 
 export async function deleteProgress(bookId: string): Promise<void> {

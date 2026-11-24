@@ -3,7 +3,7 @@ import { openDB, type DBSchema, type IDBPDatabase, type IDBPObjectStore, type St
 import type { BookMeta, Chapter, InboxItem, Mark, Progress, Setting, TaskState } from '../core/types';
 
 export const DB_NAME = 'kisr-library';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export interface KisrDB extends DBSchema {
   books: { key: string; value: BookMeta; indexes: { category: string; addedAt: number; updatedAt: number } };
@@ -13,6 +13,15 @@ export interface KisrDB extends DBSchema {
   tasks: { key: string; value: TaskState };
   settings: { key: string; value: Setting };
   inbox: { key: string; value: InboxItem };
+  /** Метки удаления для синхронизации (spec §18.2): `book:<id>` / `mark:<id>`. */
+  deleted: { key: string; value: Tombstone };
+  /** Настройка и состояние синхронизации: `config`, `remote`, `status`. В резервную копию не входит. */
+  sync: { key: string; value: { key: string; value: unknown } };
+}
+
+export interface Tombstone {
+  key: string;
+  at: number;
 }
 
 export type KisrDatabase = IDBPDatabase<KisrDB>;
@@ -37,6 +46,10 @@ function upgrade(db: KisrDatabase, oldVersion: number): void {
     db.createObjectStore('tasks', { keyPath: 'bookId' });
     db.createObjectStore('settings', { keyPath: 'key' });
     db.createObjectStore('inbox', { keyPath: 'id' });
+  }
+  if (oldVersion < 2) {
+    db.createObjectStore('deleted', { keyPath: 'key' });
+    db.createObjectStore('sync', { keyPath: 'key' });
   }
 }
 

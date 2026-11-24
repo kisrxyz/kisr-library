@@ -99,6 +99,26 @@ describe('isBackup', () => {
   });
 });
 
+describe('planMerge: книги и отметки с меткой удаления (spec §18.3)', () => {
+  const NOW = T0 + 100 * DAY;
+
+  it('восстановленная книга получает updatedAt = now, метка снимается', () => {
+    const current = { ...emptyCurrent(), deleted: { 'book:pervaya-1': T0 + DAY } };
+    const plan = planMerge(current, fileOf(), NOW);
+    expect(plan.putBooks.find((b) => b.meta.id === 'pervaya-1')?.meta.updatedAt).toBe(NOW);
+    expect(plan.putBooks.find((b) => b.meta.id === 'vtoraya-2')?.meta.updatedAt).toBe(T0);
+    expect(plan.revived).toEqual(['book:pervaya-1']);
+  });
+
+  it('отметка — так же; без меток ничего не оживляется', () => {
+    const mark: Mark = { id: 'a|k', bookId: 'a', chapter: 1, blockKey: 'k', text: '', highlight: true, note: '', createdAt: T0, updatedAt: T0 };
+    const plan = planMerge({ ...emptyCurrent(), deleted: { 'mark:a|k': T0 } }, fileOf({ marks: [mark] }), NOW);
+    expect(plan.putMarks).toEqual([{ ...mark, updatedAt: NOW }]);
+    expect(plan.revived).toEqual(['mark:a|k']);
+    expect(planMerge(emptyCurrent(), fileOf({ marks: [mark] }), NOW).revived).toEqual([]);
+  });
+});
+
 describe('planMerge', () => {
   it('пустая библиотека и файл с 2 книгами — added 2', () => {
     const plan = planMerge(emptyCurrent(), fileOf());

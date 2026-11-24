@@ -1,6 +1,8 @@
 /** Хранилища `books` и `chapters`. Запись книги — всегда одна транзакция. */
 import { pad2 } from '../core/text';
+import { bookTomb } from '../core/sync';
 import type { BookMeta, Chapter } from '../core/types';
+import { notifyLocalChange } from './changes';
 import { openDb, type WriteStore } from './schema';
 
 /** Что можно менять у книги: всё, кроме `id`. `undefined` снимает необязательное поле. */
@@ -62,6 +64,7 @@ export async function saveBook(meta: BookMeta, chapters: Chapter[]): Promise<voi
     throw e;
   }
   await tx.done;
+  notifyLocalChange('data');
 }
 
 /** Меняет поля книги и возвращает новую запись. `updatedAt` обновляется, если его не задали. */
@@ -81,22 +84,46 @@ export async function updateBookMeta(id: string, patch: BookMetaPatch): Promise<
   }
   await tx.store.put(next);
   await tx.done;
+  notifyLocalChange('data');
   return next;
 }
 
-/** Книга, её главы, прогресс, отметки и задачи — одной транзакцией. */
+/** Хранилища книги и всего, что к ней относится, из чужой транзакции на запись. */
+export interface BookStores {
+  books: WriteStore<'books'>;
+  chapters: WriteStore<'chapters'>;
+  progress: WriteStore<'progress'>;
+  marks: WriteStore<'marks'>;
+  tasks: WriteStore<'tasks'>;
+}
+
+/** Убирает книгу, её главы, прогресс, отметки и задачи в чужой транзакции. Общий кусок для удаления и синхронизации. */
+export async function removeBook(stores: BookStores, id: string): Promise<void> {
+  const [chapterKeys, markKeys] = await Promise.all([stores.chapters.index('bookId').getAllKeys(id), stores.marks.index('bookId').getAllKeys(id)]);
+  await Promise.all([
+    stores.books.delete(id),
+    stores.progress.delete(id),
+    stores.tasks.delete(id),
+    ...chapterKeys.map((key) => stores.chapters.delete(key)),
+    ...markKeys.map((key) => stores.marks.delete(key)),
+  ]);
+}
+
+/**
+ * Книга, её главы, прогресс, отметки и задачи — одной транзакцией, вместе с меткой удаления `book:<id>`:
+ * по ней удаление доезжает до других устройств (spec §18.2).
+ */
 export async function deleteBook(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(['books', 'chapters', 'progress', 'marks', 'tasks'], 'readwrite');
-  const chapters = tx.objectStore('chapters');
-  const marks = tx.objectStore('marks');
-  const [chapterKeys, markKeys] = await Promise.all([chapters.index('bookId').getAllKeys(id), marks.index('bookId').getAllKeys(id)]);
-  await Promise.all([
-    tx.objectStore('books').delete(id),
-    tx.objectStore('progress').delete(id),
-    tx.objectStore('tasks').delete(id),
-    ...chapterKeys.map((key) => chapters.delete(key)),
-    ...markKeys.map((key) => marks.delete(key)),
-  ]);
+  const tx = db.transaction(['books', 'chapters', 'progress', 'marks', 'tasks', 'deleted'], 'readwrite');
+  const stores: BookStores = {
+    books: tx.objectStore('books'),
+    chapters: tx.objectStore('chapters'),
+    progress: tx.objectStore('progress'),
+    marks: tx.objectStore('marks'),
+    tasks: tx.objectStore('tasks'),
+  };
+  await Promise.all([removeBook(stores, id), tx.objectStore('deleted').put({ key: bookTomb(id), at: Date.now() })]);
   await tx.done;
+  notifyLocalChange('data');
 }

@@ -15,11 +15,11 @@ function markOf(bookId: string, blockKey: string): Mark {
 }
 
 describe('openDb', () => {
-  it('база kisr-library версии 1 со всеми хранилищами и индексами', async () => {
+  it('база kisr-library версии 2 со всеми хранилищами и индексами', async () => {
     const db = await openDb();
     expect(db.name).toBe('kisr-library');
-    expect(db.version).toBe(1);
-    expect([...db.objectStoreNames].sort()).toEqual(['books', 'chapters', 'inbox', 'marks', 'progress', 'settings', 'tasks']);
+    expect(db.version).toBe(2);
+    expect([...db.objectStoreNames].sort()).toEqual(['books', 'chapters', 'deleted', 'inbox', 'marks', 'progress', 'settings', 'sync', 'tasks']);
     const tx = db.transaction(['books', 'chapters', 'marks', 'progress', 'tasks', 'settings', 'inbox']);
     expect([...tx.objectStore('books').indexNames].sort()).toEqual(['addedAt', 'category', 'updatedAt']);
     expect([...tx.objectStore('chapters').indexNames]).toEqual(['bookId']);
@@ -168,7 +168,7 @@ describe('deleteBook', () => {
     expect(await getMarks('a')).toEqual([]);
     expect(await getMarks('b')).toHaveLength(2);
     expect(await getTasks('a')).toEqual({ bookId: 'a', done: {} });
-    expect(await getTasks('b')).toEqual({ bookId: 'b', done: { t1: true } });
+    expect(await getTasks('b')).toEqual({ bookId: 'b', done: { t1: true }, updatedAt: expect.any(Number) });
     expect(await getChapters('b')).toHaveLength(2);
   });
 

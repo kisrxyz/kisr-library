@@ -56,16 +56,16 @@ describe('tasks', () => {
   });
 
   it('setTask туда и обратно', async () => {
-    expect(await setTask('a', 't1', true)).toEqual({ bookId: 'a', done: { t1: true } });
-    expect(await setTask('a', 't2', true)).toEqual({ bookId: 'a', done: { t1: true, t2: true } });
-    expect(await getTasks('a')).toEqual({ bookId: 'a', done: { t1: true, t2: true } });
-    expect(await setTask('a', 't1', false)).toEqual({ bookId: 'a', done: { t2: true } });
+    expect(await setTask('a', 't1', true)).toEqual({ bookId: 'a', done: { t1: true }, updatedAt: expect.any(Number) });
+    expect(await setTask('a', 't2', true)).toEqual({ bookId: 'a', done: { t1: true, t2: true }, updatedAt: expect.any(Number) });
+    expect(await getTasks('a')).toEqual({ bookId: 'a', done: { t1: true, t2: true }, updatedAt: expect.any(Number) });
+    expect(await setTask('a', 't1', false)).toEqual({ bookId: 'a', done: { t2: true }, updatedAt: expect.any(Number) });
     expect((await getTasks('a')).done).not.toHaveProperty('t1');
-    expect(await setTask('a', 't2', false)).toEqual({ bookId: 'a', done: {} });
+    expect(await setTask('a', 't2', false)).toEqual({ bookId: 'a', done: {}, updatedAt: expect.any(Number) });
   });
 
   it('снятие галочки у книги без записей не падает', async () => {
-    expect(await setTask('новая', 't1', false)).toEqual({ bookId: 'новая', done: {} });
+    expect(await setTask('новая', 't1', false)).toEqual({ bookId: 'новая', done: {}, updatedAt: expect.any(Number) });
   });
 });
 

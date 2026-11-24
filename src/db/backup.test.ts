@@ -44,7 +44,7 @@ describe('exportBackup', () => {
     expect(first.favorite).toBe(true);
     expect(file.progress).toHaveLength(1);
     expect(file.marks).toHaveLength(1);
-    expect(file.tasks).toEqual([{ bookId: 'pervaya', done: { t1: true } }]);
+    expect(file.tasks).toEqual([{ bookId: 'pervaya', done: { t1: true }, updatedAt: expect.any(Number) }]);
     expect(file.settings).toEqual({ theme: 'sepia', wpm: 200 });
     expect(isBackup(JSON.parse(JSON.stringify(file)))).toBe(true);
   });
@@ -72,7 +72,7 @@ describe('exportBackup → importBackup', () => {
     expect(await getAllChapters()).toEqual(chapters);
     expect(await getAllProgress()).toEqual(progress);
     expect(await getMarks('pervaya')).toEqual([markOf('pervaya', 'p1')]);
-    expect(await getTasks('pervaya')).toEqual({ bookId: 'pervaya', done: { t1: true } });
+    expect(await getTasks('pervaya')).toEqual({ bookId: 'pervaya', done: { t1: true }, updatedAt: expect.any(Number) });
     expect(await getSettings()).toMatchObject({ theme: 'sepia', wpm: 200 });
   });
 

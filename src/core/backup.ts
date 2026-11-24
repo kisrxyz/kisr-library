@@ -29,6 +29,8 @@ export interface LibrarySnapshot {
   tasks: TaskState[];
   /** Только записанные ключи, без значений по умолчанию. */
   settings: Partial<Settings>;
+  /** Метки удаления (spec §18.2): `book:<id>` / `mark:<id>` → время. */
+  deleted?: Record<string, number>;
 }
 
 export interface MergePlan {
@@ -38,6 +40,8 @@ export interface MergePlan {
   putTasks: TaskState[];
   settings: Partial<Settings>;
   report: { added: number; updated: number; skipped: number };
+  /** Метки удаления, которые снять: восстановленное из копии — явное «верни» (spec §18.3). */
+  revived: string[];
 }
 
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -58,6 +62,14 @@ export function isBackup(x: unknown): x is BackupFile {
     everyRecord(x.tasks, (t) => typeof t.bookId === 'string') &&
     isRecord(x.settings)
   );
+}
+
+/** Книга из БД → книга в файле: метаданные без сводки глав и главы по порядку. */
+export function toBackupBook(meta: BookMeta, chapters: { order: number; title: string; md: string }[]): BackupBook {
+  const { chapters: _summaries, ...rest } = meta;
+  void _summaries;
+  const own = [...chapters].sort((a, b) => a.order - b.order);
+  return { ...rest, chapters: own.map((c) => ({ title: c.title, md: c.md })) };
 }
 
 /** Книга из файла → записи БД. Главы нумеруются заново, слова считаются по тексту. */
@@ -98,10 +110,19 @@ const SETTING_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[];
  * Слияние при восстановлении (spec §10.6), ничего не записывает — только говорит, что записать:
  * книги по `id` (побеждает новее `updatedAt`), прогресс (новее `lastReadAt`), отметки (новее
  * `updatedAt`), задачи (объединение галочек), настройки (только те ключи, которых у нас нет).
- * Повторное слияние того же файла ничего не меняет.
+ * Повторное слияние того же файла ничего не меняет. Книга или отметка с меткой удаления
+ * не раньше её `updatedAt` получает `updatedAt = now`, а метка снимается — иначе синхронизация удалила бы её снова.
  */
-export function planMerge(current: LibrarySnapshot, incoming: BackupFile): MergePlan {
+export function planMerge(current: LibrarySnapshot, incoming: BackupFile, now: number = Date.now()): MergePlan {
   const report = { added: 0, updated: 0, skipped: 0 };
+  const deleted = current.deleted ?? {};
+  const revived: string[] = [];
+  /** Есть метка удаления не раньше `at`: снять её и вернуть «сейчас». */
+  const revive = (key: string, at: number): number => {
+    if (deleted[key] === undefined || deleted[key] < at) return at;
+    revived.push(key);
+    return now;
+  };
 
   const ourBooks = new Map(current.books.map((b) => [b.id, b]));
   const putBooks: MergePlan['putBooks'] = [];
@@ -116,6 +137,7 @@ export function planMerge(current: LibrarySnapshot, incoming: BackupFile): Merge
       continue;
     }
     const stored = toStored(book);
+    stored.meta.updatedAt = revive(`book:${book.id}`, stored.meta.updatedAt);
     putBooks.push(stored);
     ourBooks.set(book.id, stored.meta);
   }
@@ -137,10 +159,15 @@ export function planMerge(current: LibrarySnapshot, incoming: BackupFile): Merge
   const putProgress = [...progressPuts.values()];
 
   const ourMarks = new Map(current.marks.map((m) => [m.id, m]));
-  const putMarks = incoming.marks.filter((m) => {
-    const ours = ourMarks.get(m.id);
-    return !ours || m.updatedAt > ours.updatedAt;
-  });
+  const putMarks = incoming.marks
+    .filter((m) => {
+      const ours = ourMarks.get(m.id);
+      return !ours || m.updatedAt > ours.updatedAt;
+    })
+    .map((m) => {
+      const updatedAt = revive(`mark:${m.id}`, m.updatedAt);
+      return updatedAt === m.updatedAt ? m : { ...m, updatedAt };
+    });
 
   const ourTasks = new Map(current.tasks.map((t) => [t.bookId, t]));
   const putTasks: TaskState[] = [];
@@ -148,7 +175,9 @@ export function planMerge(current: LibrarySnapshot, incoming: BackupFile): Merge
     const ours = ourTasks.get(t.bookId);
     const incomingKeys = Object.keys(t.done);
     if (ours && incomingKeys.every((k) => ours.done[k])) continue;
-    putTasks.push({ bookId: t.bookId, done: { ...ours?.done, ...t.done } });
+    // Время галочек (spec §18.2) не теряем: берём более позднее из двух
+    const stamps = [ours?.updatedAt, t.updatedAt].filter((n): n is number => typeof n === 'number');
+    putTasks.push({ bookId: t.bookId, done: { ...ours?.done, ...t.done }, ...(stamps.length ? { updatedAt: Math.max(...stamps) } : {}) });
   }
 
   const settings: Partial<Settings> = {};
@@ -159,7 +188,7 @@ export function planMerge(current: LibrarySnapshot, incoming: BackupFile): Merge
     }
   }
 
-  return { putBooks, putProgress, putMarks, putTasks, settings, report };
+  return { putBooks, putProgress, putMarks, putTasks, settings, report, revived };
 }
 
 const REMINDER_DAYS = 14;

@@ -1,7 +1,8 @@
 /** Экспорт и восстановление резервной копии (spec §10.6). Правила слияния — `core/backup.ts`. */
-import { BACKUP_FORMAT, BACKUP_VERSION, planMerge, type BackupBook, type BackupFile, type LibrarySnapshot } from '../core/backup';
+import { BACKUP_FORMAT, BACKUP_VERSION, planMerge, toBackupBook, type BackupFile, type LibrarySnapshot } from '../core/backup';
 import type { Settings } from '../core/types';
 import { writeBook } from './books';
+import { notifyLocalChange } from './changes';
 import { openDb } from './schema';
 
 /** Копия всей библиотеки одним снимком: чтение идёт в одной транзакции, поэтому данные согласованы. */
@@ -25,12 +26,7 @@ export async function exportBackup(app: string): Promise<BackupFile> {
     byBook.set(c.bookId, list);
   }
 
-  const backupBooks: BackupBook[] = books.map((meta) => {
-    const { chapters: _summaries, ...rest } = meta;
-    void _summaries;
-    const own = (byBook.get(meta.id) ?? []).sort((a, b) => a.order - b.order);
-    return { ...rest, chapters: own.map((c) => ({ title: c.title, md: c.md })) };
-  });
+  const backupBooks = books.map((meta) => toBackupBook(meta, byBook.get(meta.id) ?? []));
 
   return {
     format: BACKUP_FORMAT,
@@ -45,17 +41,21 @@ export async function exportBackup(app: string): Promise<BackupFile> {
   };
 }
 
-/** Сливает копию с библиотекой одной транзакцией (всё или ничего) и возвращает итог для экрана. */
+/**
+ * Сливает копию с библиотекой одной транзакцией (всё или ничего) и возвращает итог для экрана.
+ * Книга или отметка, восстановленная поверх метки удаления, эту метку снимает (spec §18.3).
+ */
 export async function importBackup(file: BackupFile): Promise<{ added: number; updated: number; skipped: number }> {
   const db = await openDb();
-  const tx = db.transaction(['books', 'chapters', 'progress', 'marks', 'tasks', 'settings'], 'readwrite');
+  const tx = db.transaction(['books', 'chapters', 'progress', 'marks', 'tasks', 'settings', 'deleted'], 'readwrite');
   try {
-    const [books, progress, marks, tasks, settings] = await Promise.all([
+    const [books, progress, marks, tasks, settings, deleted] = await Promise.all([
       tx.objectStore('books').getAll(),
       tx.objectStore('progress').getAll(),
       tx.objectStore('marks').getAll(),
       tx.objectStore('tasks').getAll(),
       tx.objectStore('settings').getAll(),
+      tx.objectStore('deleted').getAll(),
     ]);
     const current: LibrarySnapshot = {
       books,
@@ -63,8 +63,9 @@ export async function importBackup(file: BackupFile): Promise<{ added: number; u
       marks,
       tasks,
       settings: Object.fromEntries(settings.map((row) => [row.key, row.value])) as Partial<Settings>,
+      deleted: Object.fromEntries(deleted.map((row) => [row.key, row.at])),
     };
-    const plan = planMerge(current, file);
+    const plan = planMerge(current, file, Date.now());
 
     const stores = { books: tx.objectStore('books'), chapters: tx.objectStore('chapters') };
     for (const { meta, chapters } of plan.putBooks) await writeBook(stores, meta, chapters);
@@ -73,8 +74,10 @@ export async function importBackup(file: BackupFile): Promise<{ added: number; u
       ...plan.putMarks.map((m) => tx.objectStore('marks').put(m)),
       ...plan.putTasks.map((t) => tx.objectStore('tasks').put(t)),
       ...Object.entries(plan.settings).map(([key, value]) => tx.objectStore('settings').put({ key, value })),
+      ...plan.revived.map((key) => tx.objectStore('deleted').delete(key)),
     ]);
     await tx.done;
+    notifyLocalChange('data');
     return plan.report;
   } catch (e) {
     try {
