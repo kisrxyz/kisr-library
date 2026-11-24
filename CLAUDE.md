@@ -26,8 +26,9 @@ Vite + TypeScript (strict) + Preact + `@preact/signals`, `idb`, `marked` + `domp
 
 ```
 src/core/       чистая логика без DOM и IndexedDB (парсер, время, прогресс, дубли, копии, поиск) — покрыта тестами
-src/db/         IndexedDB (`kisr-library`): books, chapters, progress, marks, tasks, settings, inbox
-src/state/      сигналы + действия (library, settings); UI читает только их
+src/db/         IndexedDB (`kisr-library`, версия 2): books, chapters, progress, marks, tasks, settings, inbox, deleted, sync
+src/state/      сигналы + действия (library, settings, sync); UI читает только их
+src/sync/       синхронизация с приватным репозиторием на GitHub (клиент, один проход, поддельный GitHub для тестов), spec §18
 src/router.ts   свой маленький роутер на `location.hash` (история, «назад», прокрутка)
 src/pwa.ts      регистрация service worker и сигнал «ждёт обновление»; сам SW — `src/sw.ts`
 src/markdown/   рендер Markdown, ключи блоков, чекбоксы, колода карточек
@@ -49,7 +50,7 @@ docs/           spec.md, book-format.md, superpowers/plans/ (план по за�
 - `npm test` — юнит-тесты (Vitest, один прогон); `npm run test:watch` — в режиме наблюдения. Тесты на реальных данных пропускаются сами, если нет `migration/` и `kisr-library/` (так и должно быть на CI)
 - `npm run typecheck` — проверка типов (входит и в `npm run build`: `tsc --noEmit && vite build`)
 - `npm run build` / `npm run preview` — сборка и просмотр (SW работает только в preview); на GitHub Pages сборка идёт с `BASE_PATH=/<репозиторий>/`
-- `npm run e2e` — Playwright (собирает проект и гоняет сценарии в WebKit/iPhone и Chromium/Android)
+- `npm run e2e` — Playwright (собирает проект и гоняет сценарии в WebKit/iPhone и Chromium/Android); если порт 4173 занят другим проектом — `E2E_PORT=4174 npm run e2e`
 - `npm run migrate` — `migration/raw` → `migration/kisr-library-backup-migrated.json`
 - `npm run icons` — PNG-иконки из `assets/icon.svg`
 - `npm run skill` — `claude-skill/kisr-library-razbor.zip`
