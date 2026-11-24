@@ -72,6 +72,7 @@ export interface Mark {
 export interface TaskState {
   bookId: string;
   done: Record<string /* "t"+hash */, true>;
+  updatedAt?: number; // последняя галочка (для синхронизации, spec §18.2); у старых записей нет
 }
 
 // settings — keyPath "key"; значения: см. §10.7

@@ -61,7 +61,7 @@ export function isBackup(x: unknown): x is BackupFile {
 }
 
 /** Книга из файла → записи БД. Главы нумеруются заново, слова считаются по тексту. */
-function toStored(book: BackupBook): { meta: BookMeta; chapters: Chapter[] } {
+export function toStored(book: BackupBook): { meta: BookMeta; chapters: Chapter[] } {
   const chapters: Chapter[] = book.chapters.map((c, i) => ({
     id: `${book.id}--${pad2(i + 1)}`,
     bookId: book.id,
@@ -79,7 +79,7 @@ function toStored(book: BackupBook): { meta: BookMeta; chapters: Chapter[] } {
 }
 
 /** Прогресс выходит за пределы книги только при ручной правке или при пропуске более короткой версии. */
-function isOutOfRange(p: Progress, meta: BookMeta): boolean {
+export function isOutOfRange(p: Progress, meta: BookMeta): boolean {
   const count = meta.chapters.length;
   return p.chapter > count || p.maxChapter > count || p.wordsRead > meta.words || p.chaptersDone.some((n) => n > count);
 }
