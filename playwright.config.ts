@@ -1,7 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/** Порт предпросмотра собранного приложения: тесты идут по настоящей сборке (с service worker), а не по dev-серверу. */
-const PORT = 4173;
+/**
+ * Порт предпросмотра собранного приложения: тесты идут по настоящей сборке (с service worker), а не по dev-серверу.
+ * `E2E_PORT` — если 4173 занят другим проектом (иначе тесты молча пойдут по чужому приложению).
+ */
+const PORT = Number(process.env.E2E_PORT) || 4173;
 
 export default defineConfig({
   testDir: 'e2e',

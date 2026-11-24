@@ -1,6 +1,7 @@
 /** Подписи и значения экрана «Ещё»: чистые функции, чтобы их можно было проверить без экрана. */
 import { formatDate, pad2 } from '../../core/text';
 import type { Settings } from '../../core/types';
+import type { SyncView } from '../../state/sync';
 import type { SegmentedOption } from '../../ui/Segmented';
 
 const NBSP = '\u00A0';
@@ -45,4 +46,28 @@ export function speedOptions(current: number): SegmentedOption<number>[] {
   const values: number[] = [...SPEEDS];
   if (!values.includes(current)) values.push(current);
   return values.sort((a, b) => a - b).map((value) => ({ value, label: String(value) }));
+}
+
+/** «сегодня в 14:05», «вчера в 09:00», «17 нояб. в 21:40» — по местному времени. */
+function whenLine(ts: number, now: number): string {
+  const d = new Date(ts);
+  const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const day = (t: number) => new Date(t).toDateString();
+  if (day(ts) === day(now)) return `сегодня в ${time}`;
+  if (day(ts) === day(now - 24 * 60 * 60 * 1000)) return `вчера в ${time}`;
+  return `${formatDate(ts)} в ${time}`;
+}
+
+/** Строка состояния синхронизации под «Включена · …» (spec §18.6). */
+export function syncStatusLine(view: SyncView, now: number): string {
+  switch (view.phase) {
+    case 'syncing':
+      return 'Синхронизирую…';
+    case 'offline':
+      return 'Нет сети — продолжу, когда появится';
+    case 'error':
+      return view.error ?? 'Не удалось синхронизировать';
+    default:
+      return view.lastSyncAt === null ? 'Ещё не синхронизировалось' : `Синхронизировано ${whenLine(view.lastSyncAt, now)}`;
+  }
 }

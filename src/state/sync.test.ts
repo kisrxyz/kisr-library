@@ -1,7 +1,9 @@
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { notifyLocalChange } from '../db/changes';
+import { newProgress } from '../core/progress';
 import { saveBook } from '../db/books';
+import { putProgress } from '../db/progress';
 import { __resetDbForTests } from '../db/schema';
 import { getSyncConfig, setSyncConfig } from '../db/sync';
 import { sampleBook } from '../db/testing';
@@ -203,6 +205,40 @@ describe('приход с другого устройства', () => {
     await connectSync('right', '');
     expect(books.value.map((b) => b.id).sort()).toEqual(['pervaya', 'vtoraya']);
     expect(toasts.value.map((t) => t.text)).toContain('С другого устройства: +2 книги');
+    expect(progressArrived.value).toBeNull();
+  });
+});
+
+describe('место чтения с другого устройства', () => {
+  async function shareFromA(chapter: number, lastReadAt: number) {
+    const deviceA = new IDBFactory();
+    useDevice(deviceA);
+    const one = sampleBook('Первая', 3, { id: 'pervaya' });
+    await saveBook(one.meta, one.chapters);
+    await putProgress({ ...newProgress('pervaya', 1000), chapter, maxChapter: chapter, lastReadAt });
+    await connectSync('right', '');
+    __resetSyncForTests();
+  }
+
+  it('сдвинулось — книга в progressArrived', async () => {
+    await shareFromA(3, 5000);
+    useDevice(new IDBFactory());
+    const one = sampleBook('Первая', 3, { id: 'pervaya' });
+    await saveBook(one.meta, one.chapters);
+    await putProgress({ ...newProgress('pervaya', 1000), chapter: 1, lastReadAt: 2000 });
+    await loadLibrary();
+    await connectSync('right', '');
+    expect(progressArrived.value?.ids).toEqual(['pervaya']);
+  });
+
+  it('то же место, другое только время — подсказки нет', async () => {
+    await shareFromA(2, 5000);
+    useDevice(new IDBFactory());
+    const one = sampleBook('Первая', 3, { id: 'pervaya' });
+    await saveBook(one.meta, one.chapters);
+    await putProgress({ ...newProgress('pervaya', 1000), chapter: 2, maxChapter: 2, lastReadAt: 2000 });
+    await loadLibrary();
+    await connectSync('right', '');
     expect(progressArrived.value).toBeNull();
   });
 });

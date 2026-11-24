@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../core/types';
-import { appearanceSummary, backupFileName, formatBytes, lastBackupLine, speedOptions } from './format';
+import { appearanceSummary, backupFileName, formatBytes, lastBackupLine, speedOptions, syncStatusLine } from './format';
 
 const NB = '\u00A0';
 
@@ -62,5 +62,23 @@ describe('speedOptions', () => {
   it('своё значение из восстановленных настроек встаёт на своё место', () => {
     expect(speedOptions(200).map((o) => o.value)).toEqual([150, 180, 200, 220, 260]);
     expect(speedOptions(120).map((o) => o.value)).toEqual([120, 150, 180, 220, 260]);
+  });
+});
+
+describe('syncStatusLine', () => {
+  const now = new Date(2026, 10, 24, 15, 30).getTime();
+  const view = { phase: 'idle' as const, repo: 'kisr/kisr-library-data', lastSyncAt: null, error: null, needsToken: false };
+
+  it('время последней синхронизации: сегодня, вчера, дата', () => {
+    expect(syncStatusLine({ ...view, lastSyncAt: new Date(2026, 10, 24, 14, 5).getTime() }, now)).toBe('Синхронизировано сегодня в 14:05');
+    expect(syncStatusLine({ ...view, lastSyncAt: new Date(2026, 10, 23, 9, 0).getTime() }, now)).toBe('Синхронизировано вчера в 09:00');
+    expect(syncStatusLine({ ...view, lastSyncAt: new Date(2026, 10, 17, 21, 40).getTime() }, now)).toMatch(/^Синхронизировано 17 нояб\.? в 21:40$/);
+    expect(syncStatusLine(view, now)).toBe('Ещё не синхронизировалось');
+  });
+
+  it('идёт проход, нет сети, ошибка', () => {
+    expect(syncStatusLine({ ...view, phase: 'syncing' }, now)).toBe('Синхронизирую…');
+    expect(syncStatusLine({ ...view, phase: 'offline' }, now)).toBe('Нет сети — продолжу, когда появится');
+    expect(syncStatusLine({ ...view, phase: 'error', error: 'Ключ не подходит. Вставь новый' }, now)).toBe('Ключ не подходит. Вставь новый');
   });
 });

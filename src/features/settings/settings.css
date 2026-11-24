@@ -237,3 +237,84 @@ button.srow:disabled {
   font-size: 0.875em;
   overflow-wrap: anywhere;
 }
+
+/* ---------- Синхронизация ---------- */
+
+.ssync__error {
+  color: var(--danger);
+}
+
+.ssync {
+  display: grid;
+  gap: 14px;
+}
+
+.ssync__steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+  font-size: var(--size-small);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.ssync__steps li::marker {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ssync__steps a {
+  color: var(--accent);
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
+
+.ssync__steps code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--paper);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+.ssync__field {
+  display: grid;
+  gap: 6px;
+}
+
+.ssync__label {
+  color: var(--muted);
+  font-size: var(--size-meta);
+  font-weight: 500;
+}
+
+.ssync__input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: max(16px, 1rem);
+}
+
+.ssync__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ssync__notice {
+  margin: 0;
+  padding: 0;
+}
+
+.ssync__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--size-meta);
+  line-height: 1.5;
+  text-wrap: pretty;
+}

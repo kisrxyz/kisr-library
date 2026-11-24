@@ -4,9 +4,10 @@ import { AppearanceSection, ReadingSection } from './AppearanceSection';
 import { DataSection } from './DataSection';
 import { HelpSection } from './HelpSection';
 import { StatsSection } from './StatsSection';
+import { SyncSection } from './SyncSection';
 import './settings.css';
 
-/** «Ещё» (spec §10.7): внешний вид, чтение, данные, статистика, помощь, о приложении. */
+/** «Ещё» (spec §10.7): внешний вид, чтение, синхронизация (§18.6), данные, статистика, помощь, о приложении. */
 export function SettingsScreen() {
   return (
     <>
@@ -14,6 +15,7 @@ export function SettingsScreen() {
       <main class="screen settings">
         <AppearanceSection />
         <ReadingSection />
+        <SyncSection />
         <DataSection />
         <StatsSection />
         <HelpSection />

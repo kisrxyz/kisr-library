@@ -28,6 +28,7 @@ import { ReaderTopBar } from './ReaderTopBar';
 import { BlockActionsSlot, SettingsSlot, TocSlot } from './slots';
 import { scrollWindowTo, useAutoHide } from './useAutoHide';
 import { anchorTargetY, fontsSettled, usePositionTracking } from './usePositionTracking';
+import { useArrivedHint } from './useArrivedHint';
 import './reader.css';
 
 /** Подсветка блока, к которому перешли (spec §8.4: ~2 с). Снимается таймером: при reduced-motion анимации нет. */
@@ -78,6 +79,7 @@ function ChapterView({ book, chapter, route }: ChapterViewProps) {
   const meta = book.chapters[chapter - 1];
   const progress = progressMap.value.get(id);
   const { wpm } = settings.value;
+  useArrivedHint(book);
 
   const barRef = useRef<HTMLElement>(null);
   const proseRef = useRef<HTMLDivElement>(null);

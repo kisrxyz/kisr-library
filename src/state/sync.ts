@@ -9,7 +9,7 @@ import { clearSync, getLastSyncAt, getSyncConfig, setSyncConfig, type SyncConfig
 import { runSync, type SyncResult } from '../sync/engine';
 import { GitHubError, getRepo, getUser, repoClient, type GitHubErrorKind } from '../sync/github';
 import { toast } from '../ui/toast-state';
-import { loadLibrary } from './library';
+import { loadLibrary, progressMap } from './library';
 
 export type SyncPhase = 'off' | 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -27,7 +27,7 @@ export interface SyncView {
 const OFF: SyncView = { phase: 'off', repo: null, lastSyncAt: null, error: null, needsToken: false };
 
 export const syncView = signal<SyncView>({ ...OFF });
-/** С другого устройства пришло место чтения этих книг (для подсказки в открытой читалке). */
+/** С другого устройства пришло другое место чтения этих книг (глава или абзац): подсказка в открытой читалке. */
 export const progressArrived = signal<{ ids: string[]; at: number } | null>(null);
 
 /** После правки книги, отметки, галочки, удаления. */
@@ -170,9 +170,17 @@ async function doRun(cfg: SyncConfig): Promise<SyncResult | null> {
     if (config !== cfg) return result;
     retryStep = 0;
     setView({ phase: 'idle', lastSyncAt: Date.now(), error: null, needsToken: false });
+    const before = progressMap.peek();
     if (result.added + result.updated + result.removed > 0 || result.progressFrom.length) await loadLibrary();
     if (result.added) toast(`С другого устройства: +${result.added} ${plural(result.added, 'книга', 'книги', 'книг')}`);
-    if (result.progressFrom.length) progressArrived.value = { ids: result.progressFrom, at: Date.now() };
+    // Подсказка в читалке — только если место правда другое (глава или абзац), а не только время
+    const after = progressMap.peek();
+    const moved = result.progressFrom.filter((id) => {
+      const was = before.get(id);
+      const now = after.get(id);
+      return now !== undefined && (was === undefined || was.chapter !== now.chapter || was.blockKey !== now.blockKey);
+    });
+    if (moved.length) progressArrived.value = { ids: moved, at: Date.now() };
     return result;
   } catch (error) {
     if (config !== cfg) return null;
